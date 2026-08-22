@@ -15,8 +15,8 @@ def test_findspots_synthetic_clean(test_data_dir):
         snr_threshold=3.0,
         min_spot_area=2,
         max_spot_area=500,
-        beam_x=1536.0,  # Center of 3072x3072
-        beam_y=1536.0,
+        beam_x=spec.cx,  # Center of 3072x3072
+        beam_y=spec.cy,
         pixel_size_x=spec.qx,
         pixel_size_y=spec.qy,
         distance=spec.distance,

@@ -274,3 +274,63 @@ int mxspots_find_spots(
 
     return spot_count;
 }
+
+int mxspots_score_spots(
+    const MxSpot *spots,
+    int spot_count,
+    MxScoreResult *out_score
+) {
+    if (out_score == NULL) {
+        return -1;
+    }
+
+    if (spots == NULL || spot_count <= 0) {
+        out_score->spot_count = 0;
+        out_score->avg_snr = 0.0f;
+        out_score->d_min = 999.0f;
+        out_score->percentage_indexed = 0.0f;
+        return 0;
+    }
+
+    out_score->spot_count = spot_count;
+    double sum_snr = 0.0;
+    float min_d = 999.0f;
+
+    for (int i = 0; i < spot_count; ++i) {
+        sum_snr += spots[i].snr;
+        if (spots[i].d_spacing > 0.0f && spots[i].d_spacing < min_d) {
+            min_d = spots[i].d_spacing;
+        }
+    }
+
+    out_score->avg_snr = (float)(sum_snr / spot_count);
+    out_score->d_min = min_d;
+    out_score->percentage_indexed = 0.0f;
+
+    return 0;
+}
+
+int mxspots_score_frame(
+    const float *data,
+    int nx,
+    int ny,
+    const MxSpotsParams *params,
+    MxScoreResult *out_score
+) {
+    if (data == NULL || nx <= 0 || ny <= 0 || params == NULL || out_score == NULL) {
+        return -1;
+    }
+
+    int max_spots = 50000;
+    MxSpot *spots = (MxSpot *)malloc(max_spots * sizeof(MxSpot));
+    if (spots == NULL) {
+        return -2;
+    }
+
+    int spot_count = mxspots_find_spots(data, nx, ny, params, spots, max_spots);
+    int actual_count = (spot_count < max_spots) ? spot_count : max_spots;
+
+    int ret = mxspots_score_spots(spots, actual_count, out_score);
+    free(spots);
+    return ret;
+}

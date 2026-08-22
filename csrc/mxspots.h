@@ -76,6 +76,38 @@ MXSPOTS_API int mxspots_find_spots(
     int max_spots
 );
 
+/**
+ * Compute quality score metrics from a detected spot list.
+ *
+ * @param spots      Array of detected spots.
+ * @param spot_count Number of spots in array.
+ * @param out_score  Pointer to MxScoreResult struct to receive quality metrics.
+ * @return           0 on success, non-zero on error.
+ */
+MXSPOTS_API int mxspots_score_spots(
+    const MxSpot *spots,
+    int spot_count,
+    MxScoreResult *out_score
+);
+
+/**
+ * Compute quality score metrics directly from a 2D float32 diffraction image.
+ *
+ * @param data       Pointer to row-major 2D float32 image array (size nx * ny).
+ * @param nx         Image width in pixels.
+ * @param ny         Image height in pixels.
+ * @param params     Spot finding parameters and experimental geometry.
+ * @param out_score  Pointer to MxScoreResult struct to receive quality metrics.
+ * @return           0 on success, non-zero on error.
+ */
+MXSPOTS_API int mxspots_score_frame(
+    const float *data,
+    int nx,
+    int ny,
+    const MxSpotsParams *params,
+    MxScoreResult *out_score
+);
+
 #ifdef __cplusplus
 }
 #endif

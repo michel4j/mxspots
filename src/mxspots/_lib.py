@@ -134,3 +134,21 @@ def _configure_signatures(lib: ctypes.CDLL) -> None:
         ctypes.c_int,                            # max_spots
     ]
     lib.mxspots_find_spots.restype = ctypes.c_int
+
+    # mxspots_score_spots signature
+    lib.mxspots_score_spots.argtypes = [
+        ctypes.POINTER(CMxSpot),                 # spots
+        ctypes.c_int,                            # spot_count
+        ctypes.POINTER(CMxScoreResult),          # out_score
+    ]
+    lib.mxspots_score_spots.restype = ctypes.c_int
+
+    # mxspots_score_frame signature
+    lib.mxspots_score_frame.argtypes = [
+        ctypes.POINTER(ctypes.c_float),          # data
+        ctypes.c_int,                            # nx
+        ctypes.c_int,                            # ny
+        ctypes.POINTER(CMxSpotsParams),          # params
+        ctypes.POINTER(CMxScoreResult),          # out_score
+    ]
+    lib.mxspots_score_frame.restype = ctypes.c_int

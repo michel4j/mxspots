@@ -2,6 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 from .spotfinder import findspots
+from .scorer import score
 from .models import SpotParams
 
 
@@ -23,7 +24,6 @@ def findspots_main():
 
     args = parser.parse_args()
 
-    # If non-default parameters specified, pass them
     params = None
     if any([args.snr != 3.0, args.min_area != 2, args.max_area != 500, args.beam_x != 0.0,
             args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0]):
@@ -57,7 +57,51 @@ def findspots_main():
 
 
 def score_main():
-    print("mxspots.score - Quality scoring engine")
+    parser = argparse.ArgumentParser(
+        prog="mxspots.score",
+        description="Compute quality score metrics for an MX diffraction image",
+    )
+    parser.add_argument("image", help="Path to diffraction image file (.cbf, .h5, .yaml, etc.)")
+    parser.add_argument("--json", action="store_true", help="Output results formatted as JSON")
+    parser.add_argument("--snr", type=float, default=3.0, help="SNR threshold for spot detection (default: 3.0)")
+    parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
+    parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
+    parser.add_argument("--beam-x", type=float, default=0.0, help="Detector beam center X in pixels (0 for auto)")
+    parser.add_argument("--beam-y", type=float, default=0.0, help="Detector beam center Y in pixels (0 for auto)")
+    parser.add_argument("--distance", type=float, default=0.0, help="Detector distance in mm (0 for auto)")
+    parser.add_argument("--wavelength", type=float, default=0.0, help="Wavelength in Angstroms (0 for auto)")
+
+    args = parser.parse_args()
+
+    params = None
+    if any([args.snr != 3.0, args.min_area != 2, args.max_area != 500, args.beam_x != 0.0,
+            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0]):
+        params = SpotParams(
+            snr_threshold=args.snr,
+            min_spot_area=args.min_area,
+            max_spot_area=args.max_area,
+            beam_x=args.beam_x,
+            beam_y=args.beam_y,
+            distance=args.distance if args.distance > 0 else 200.0,
+            wavelength=args.wavelength if args.wavelength > 0 else 1.0,
+        )
+
+    try:
+        score_res = score(args.image, params=params)
+    except Exception as e:
+        sys.stderr.write(f"Error: {e}\n")
+        sys.exit(1)
+
+    if args.json:
+        print(score_res.to_json(indent=2))
+    else:
+        print(f"Quality Score for {args.image}:")
+        print(f"  Spot Count:         {score_res.spot_count}")
+        print(f"  Average SNR:        {score_res.avg_snr:.2f}")
+        d_min_str = f"{score_res.d_min:.2f} Å" if score_res.d_min < 900.0 else "N/A"
+        print(f"  Resolution Limit:   {d_min_str}")
+        if score_res.percentage_indexed is not None:
+            print(f"  Percentage Indexed: {score_res.percentage_indexed:.1f}%")
 
 
 def index_main():
