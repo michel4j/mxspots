@@ -1,6 +1,8 @@
 import ctypes
 from pathlib import Path
 from typing import Optional, Union, Any
+
+import mxio
 import numpy as np
 from .models import SpotParams, ScoreResult
 from ._lib import get_lib, CMxSpotsParams, CMxScoreResult
@@ -57,9 +59,21 @@ def score(
 ) -> ScoreResult:
     """
     Load an image frame and compute quality score metrics.
-    Supports file paths (.cbf, .h5, .yaml, etc.), mxio ImageFrame objects, and SyntheticFrame objects.
+    :param image_source: Image source, Supports file paths (.cbf, .h5, .yaml, etc.), mxio
+    ImageFrame and DataSet, objects, and SyntheticFrame objects.
+    :param params: SpotParams object, defaults to None
     """
-    # 1. SyntheticFrame directly
+
+    if isinstance(image_source, (str, Path)):
+        p = Path(image_source)
+        if p.is_file() and p.suffix.lower() in (".yaml", ".yml"):
+            image_source = generate_synthetic_frame(p)
+        else:
+            image_source = mxio.DataSet.new_from_file(p)
+        if image_source is None:
+            raise ValueError(f"Could not load image source: {p}")
+
+    # SyntheticFrame directly
     if isinstance(image_source, SyntheticFrame):
         if params is None:
             params = SpotParams(
@@ -72,58 +86,20 @@ def score(
             )
         return score_data(image_source.data, params=params)
 
-    # 2. String or Path object
-    if isinstance(image_source, (str, Path)):
-        p = Path(image_source)
-        if not p.is_file():
-            raise FileNotFoundError(f"Image file not found: {p}")
+    # mxio.DataSet directly
+    if isinstance(image_source, mxio.DataSet):
+        image_source = image_source.frame
 
-        if p.suffix.lower() in (".yaml", ".yml"):
-            synth = generate_synthetic_frame(p)
-            return score(synth, params=params)
-
-        import mxio
-        frame = mxio.read_image(str(p))
-        if frame is None:
-            raise ValueError(f"Could not read image file with mxio: {p}")
-
-        img_data = frame.data
-        beam_x = getattr(frame.center, "x", 0.0) if hasattr(frame, "center") else 0.0
-        beam_y = getattr(frame.center, "y", 0.0) if hasattr(frame, "center") else 0.0
-        pixel_x = getattr(frame.pixel_size, "x", 0.075) if hasattr(frame, "pixel_size") else 0.075
-        pixel_y = getattr(frame.pixel_size, "y", 0.075) if hasattr(frame, "pixel_size") else 0.075
-        distance = getattr(frame, "distance", 200.0)
-        wavelength = getattr(frame, "wavelength", 1.0)
-
+    # mxio.ImageFrame direcly
+    if isinstance(image_source, mxio.ImageFrame):
         if params is None:
             params = SpotParams(
-                beam_x=beam_x,
-                beam_y=beam_y,
-                pixel_size_x=pixel_x,
-                pixel_size_y=pixel_y,
-                distance=distance,
-                wavelength=wavelength,
-            )
-
-        return score_data(img_data, params=params)
-
-    # 3. Object with .data attribute (e.g. mxio ImageFrame directly)
-    if hasattr(image_source, "data") and isinstance(image_source.data, np.ndarray):
-        beam_x = getattr(image_source.center, "x", 0.0) if hasattr(image_source, "center") else 0.0
-        beam_y = getattr(image_source.center, "y", 0.0) if hasattr(image_source, "center") else 0.0
-        pixel_x = getattr(image_source.pixel_size, "x", 0.075) if hasattr(image_source, "pixel_size") else 0.075
-        pixel_y = getattr(image_source.pixel_size, "y", 0.075) if hasattr(image_source, "pixel_size") else 0.075
-        distance = getattr(image_source, "distance", 200.0)
-        wavelength = getattr(image_source, "wavelength", 1.0)
-
-        if params is None:
-            params = SpotParams(
-                beam_x=beam_x,
-                beam_y=beam_y,
-                pixel_size_x=pixel_x,
-                pixel_size_y=pixel_y,
-                distance=distance,
-                wavelength=wavelength,
+                beam_x=image_source.center.x,
+                beam_y=image_source.center.y,
+                pixel_size_x=image_source.pixel_size.x,
+                pixel_size_y=image_source.pixel_size.y,
+                distance=image_source.distance,
+                wavelength=image_source.wavelength,
             )
 
         return score_data(image_source.data, params=params)
