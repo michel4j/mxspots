@@ -11,8 +11,12 @@ dependencies = [
     "mxio  (>=2025.10.7)",
     "numpy (>=2.5.2,<3.0.0)",
     "pyyaml (>=6.0.3,<7.0.0)",
-    "pytest (>=9.1.1,<10.0.0)",
-    "matplotlib (>=3.11.1,<4.0.0)",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1.1,<10.0.0",
+    "matplotlib>=3.11.1,<4.0.0",
 ]
 
 [project.scripts]
@@ -28,3 +32,4 @@ build-backend = "scikit_build_core.build"
 build.verbose = true
 cmake.build-type = "Release"
 wheel.packages = ["src/mxspots"]
+sdist.include = ["tests/*"]
