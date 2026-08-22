@@ -1,5 +1,6 @@
 from dataclasses import dataclass, asdict
-from typing import List, Optional
+from typing import List, Optional, Union
+from pathlib import Path
 import json
 
 
@@ -44,6 +45,17 @@ class SpotList:
 
     def to_json(self, indent: Optional[int] = None) -> str:
         return json.dumps(self.to_dict(), indent=indent)
+
+    def to_xds(self, path: Union[str, Path] = "SPOT.XDS", angle: float = 0.0) -> Path:
+        """
+        Export spot list to standard XDS ASCII table format (SPOT.XDS).
+        Columns: X Y ANGLE INTENSITY
+        """
+        out_path = Path(path)
+        with open(out_path, "w", encoding="utf-8") as f:
+            for spot in self.spots:
+                f.write(f"{spot.x:10.2f} {spot.y:10.2f} {angle:10.2f} {spot.intensity:10.1f}\n")
+        return out_path
 
 
 @dataclass(frozen=True)

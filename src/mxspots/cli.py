@@ -13,6 +13,9 @@ def findspots_main():
     )
     parser.add_argument("image", help="Path to diffraction image file (.cbf, .h5, .yaml, etc.)")
     parser.add_argument("--json", action="store_true", help="Output results formatted as JSON")
+    parser.add_argument("--xds", action="store_true", help="Export spots to SPOT.XDS in current directory")
+    parser.add_argument("--xds-file", type=str, default="SPOT.XDS", help="Filename for XDS export (default: SPOT.XDS)")
+    parser.add_argument("--angle", type=float, default=None, help="Spindle rotation angle in degrees for XDS export (auto if not set)")
     parser.add_argument("--snr", type=float, default=3.0, help="SNR threshold for spot detection (default: 3.0)")
     parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
     parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
@@ -37,8 +40,16 @@ def findspots_main():
             wavelength=args.wavelength if args.wavelength > 0 else 1.0,
         )
 
+    xds_out = args.xds_file if args.xds else None
+
     try:
-        spot_list = findspots(args.image, params=params, max_spots=args.max_spots)
+        spot_list = findspots(
+            args.image,
+            params=params,
+            max_spots=args.max_spots,
+            xds_output=xds_out,
+            angle=args.angle,
+        )
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
         sys.exit(1)
@@ -54,6 +65,8 @@ def findspots_main():
             print(f"{idx:<6} {spot.x:<10.2f} {spot.y:<10.2f} {spot.d_spacing:<10.2f} {spot.intensity:<12.1f} {spot.snr:<8.1f}")
         if spot_list.count > 20:
             print(f"... and {spot_list.count - 20} more spots.")
+        if args.xds:
+            print(f"Exported spots to {args.xds_file}")
 
 
 def score_main():
