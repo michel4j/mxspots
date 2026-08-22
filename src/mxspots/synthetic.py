@@ -61,18 +61,41 @@ def load_synthetic_spec(yaml_path: Union[str, Path]) -> SyntheticSpec:
     )
 
 
+def generate_2d_gaussian(size: tuple[int, int], center: tuple[float, float] | None = None, sigma: float = 3.0):
+    """
+    Generates a square 2D array filled with a gaussian distribution centered at center
+    :param center: Center pixel coordinates
+    :param size: size of the 2D array
+    :param sigma: The standard deviation of the gaussian distribution
+    """
+
+    nx, ny = size
+    cx, cy = (nx//2, ny//2) if center is None else center
+    x = np.arange(nx) - cx
+    y = np.arange(ny) - cy
+    x_grid, y_grid = np.meshgrid(x, y)
+    squared_distance = x_grid ** 2 + y_grid ** 2
+    data = np.exp(-squared_distance / (2.0 * sigma ** 2))
+    return data
+
+
 def generate_synthetic_frame(
     spec_or_path: Union[SyntheticSpec, str, Path],
     max_spots: Optional[int] = None,
     sigma: float = 1.2,
     background: float = 10.0,
     noise_sigma: float = 2.0,
-    add_noise: bool = False,
+    add_noise: bool = True,
 ) -> SyntheticFrame:
     """
     Render a 2D synthetic diffraction frame with 2D Gaussian spot profiles.
-    
     Returns a SyntheticFrame containing metadata and the float32 2D NumPy array.
+    :param spec_or_path: Ether a Frame Spec or a path to a yaml file containing the frame spec
+    :param max_spots: Maximum number of spots to render, if not provided, use all spots in frame spec
+    :param sigma: Standard deviation of the spot profile
+    :param background: Background intensity
+    :param noise_sigma: Standard deviation of the gaussian noise
+    :param add_noise: Whether to add a background noise and scatter to the frame
     """
     if isinstance(spec_or_path, (str, Path)):
         spec = load_synthetic_spec(spec_or_path)
@@ -110,9 +133,16 @@ def generate_synthetic_frame(
         frame_data[y_min:y_max, x_min:x_max] += patch.astype(np.float32)
 
     if add_noise:
-        # Add background and Gaussian noise
+        # Add background noise
         noise = np.random.normal(background, noise_sigma, size=frame_data.shape).astype(np.float32)
         frame_data += noise
+
+        # Add background scatter
+        scale_1, scale_2 = 10 * background, background
+        scatter = generate_2d_gaussian(size=(spec.nx, spec.ny), center=(spec.cx, spec.cy), sigma=spec.nx) * scale_1
+        scatter -= generate_2d_gaussian(size=(spec.nx, spec.ny), center=(spec.cx, spec.cy), sigma=spec.nx//8) * scale_2
+        frame_data += scatter
+
         np.clip(frame_data, 0.0, None, out=frame_data)
 
     return SyntheticFrame(
@@ -133,7 +163,7 @@ def generate_synthetic_frame(
 def get_cached_synthetic_frame(
     yaml_name_or_path: str,
     max_spots: Optional[int] = None,
-    sigma: float = 1.2,
+    sigma: float = 1.5,
     background: float = 10.0,
     noise_sigma: float = 2.0,
     add_noise: bool = False,
