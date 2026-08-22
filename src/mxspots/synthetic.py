@@ -15,6 +15,8 @@ class SyntheticSpec:
     ny: int
     qx: float
     qy: float
+    cx: float
+    cy: float
     spots: List[Tuple[float, float, float]]  # List of (x, y, intensity)
 
 
@@ -26,6 +28,8 @@ class SyntheticFrame:
     ny: int
     qx: float
     qy: float
+    cx: float
+    cy: float
     spots: List[Tuple[float, float, float]]
     data: np.ndarray  # 2D float32 array of shape (ny, nx)
 
@@ -51,6 +55,8 @@ def load_synthetic_spec(yaml_path: Union[str, Path]) -> SyntheticSpec:
         ny=int(doc["ny"]),
         qx=float(doc["qx"]),
         qy=float(doc["qy"]),
+        cx=float(doc["cx"]),
+        cy=float(doc["cy"]),
         spots=spots,
     )
 
@@ -116,6 +122,8 @@ def generate_synthetic_frame(
         ny=spec.ny,
         qx=spec.qx,
         qy=spec.qy,
+        cx=spec.cx,
+        cy=spec.cy,
         spots=spots_to_render,
         data=frame_data,
     )
