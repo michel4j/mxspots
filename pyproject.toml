@@ -1,0 +1,25 @@
+[project]
+name = "mxspots"
+version = "0.1.0"
+description = "Spot Analysis for Assessing Quality of MX Diffraction Frames"
+authors = [
+    {name = "Michel Fodje", email = "michel4j@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mxio",
+]
+
+[project.scripts]
+"mxspots.findspots" = "mxspots.cli:findspots_main"
+"mxspots.score"     = "mxspots.cli:score_main"
+"mxspots.index"     = "mxspots.cli:index_main"
+
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+cmake.verbose = true
+cmake.build-type = "Release"
