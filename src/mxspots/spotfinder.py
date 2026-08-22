@@ -90,6 +90,11 @@ def findspots(
         if image_source is None:
             raise ValueError(f"Could not load image source: {p}")
 
+    # mxio.DataSet directly
+    if isinstance(image_source, mxio.DataSet):
+        detected_index = image_source.index
+        image_source = image_source.frame
+
     # SyntheticFrame directly
     if isinstance(image_source, SyntheticFrame):
         if params is None:
@@ -104,21 +109,6 @@ def findspots(
         detected_index = 1
         spot_list = findspots_data(image_source.data, params, max_spots=max_spots)
 
-    # mxio.DataSet directly
-    elif isinstance(image_source, mxio.DataSet):
-        frame = image_source.frame
-        if params is None:
-            params = SpotParams(
-                beam_x=frame.center.x,
-                beam_y=frame.center.y,
-                pixel_size_x=frame.pixel_size.x,
-                pixel_size_y=frame.pixel_size.y,
-                distance=frame.distance,
-                wavelength=frame.wavelength,
-            )
-        detected_index = getattr(frame, "index", 1)
-        spot_list = findspots_data(frame.data, params, max_spots=max_spots)
-
     # mxio.ImageFrame directly
     elif isinstance(image_source, mxio.ImageFrame):
         if params is None:
@@ -130,11 +120,7 @@ def findspots(
                 distance=image_source.distance,
                 wavelength=image_source.wavelength,
             )
-        detected_index = getattr(image_source, "index", 1)
-        spot_list = findspots_data(image_source.data, params, max_spots=max_spots)
-
-    elif hasattr(image_source, "data") and isinstance(image_source.data, np.ndarray):
-        detected_index = getattr(image_source, "index", 1)
+        detected_index = (image_source.start_angle / image_source.delta_angle) + 1.0
         spot_list = findspots_data(image_source.data, params, max_spots=max_spots)
 
     else:
