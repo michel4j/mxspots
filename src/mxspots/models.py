@@ -46,15 +46,22 @@ class SpotList:
     def to_json(self, indent: Optional[int] = None) -> str:
         return json.dumps(self.to_dict(), indent=indent)
 
-    def to_xds(self, path: Union[str, Path] = "SPOT.XDS", angle: float = 0.0) -> Path:
+    def to_xds(
+        self,
+        path: Union[str, Path] = "SPOT.XDS",
+        z: float = 0.5,
+        frame_index: Optional[int] = None,
+    ) -> Path:
         """
         Export spot list to standard XDS ASCII table format (SPOT.XDS).
-        Columns: X Y ANGLE INTENSITY
+        Columns: X Y Z INTENSITY
+        Where Z represents the continuous frame coordinate (frame_index - 0.5).
         """
         out_path = Path(path)
+        effective_z = (float(frame_index) - 0.5) if frame_index is not None else float(z)
         with open(out_path, "w", encoding="utf-8") as f:
             for spot in self.spots:
-                f.write(f"{spot.x:10.2f} {spot.y:10.2f} {angle:10.2f} {spot.intensity:10.1f}\n")
+                f.write(f"{spot.x:10.2f} {spot.y:10.2f} {effective_z:10.2f} {spot.intensity:10.1f}\n")
         return out_path
 
 

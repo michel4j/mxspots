@@ -65,7 +65,8 @@ def findspots(
     params: Optional[SpotParams] = None,
     max_spots: int = 2000,
     xds_output: Optional[Union[str, Path]] = None,
-    angle: Optional[float] = None,
+    index: Optional[int] = None,
+    z: Optional[float] = None,
 ) -> SpotList:
     """
     Load an image frame and perform spot finding.
@@ -75,9 +76,10 @@ def findspots(
     :param params: SpotParams object, defaults to None
     :param max_spots: Maximum number of spots to return, defaults to 2000.
     :param xds_output: Optional path to export detected spots to SPOT.XDS format.
-    :param angle: Spindle rotation angle in degrees (if None, auto-extracted or 0.0).
+    :param index: Frame index (1-based), sets Z coordinate to index - 0.5 in SPOT.XDS.
+    :param z: Explicit Z continuous frame coordinate in SPOT.XDS (overrides index).
     """
-    detected_angle = 0.0
+    detected_index = 1
 
     if isinstance(image_source, (str, Path)):
         p = Path(image_source)
@@ -99,7 +101,7 @@ def findspots(
                 distance=image_source.distance,
                 wavelength=image_source.wavelength,
             )
-        detected_angle = 0.0
+        detected_index = 1
         spot_list = findspots_data(image_source.data, params, max_spots=max_spots)
 
     # mxio.DataSet directly
@@ -114,7 +116,7 @@ def findspots(
                 distance=frame.distance,
                 wavelength=frame.wavelength,
             )
-        detected_angle = getattr(frame, "start_angle", 0.0)
+        detected_index = getattr(frame, "index", 1)
         spot_list = findspots_data(frame.data, params, max_spots=max_spots)
 
     # mxio.ImageFrame directly
@@ -128,18 +130,24 @@ def findspots(
                 distance=image_source.distance,
                 wavelength=image_source.wavelength,
             )
-        detected_angle = getattr(image_source, "start_angle", 0.0)
+        detected_index = getattr(image_source, "index", 1)
         spot_list = findspots_data(image_source.data, params, max_spots=max_spots)
 
     elif hasattr(image_source, "data") and isinstance(image_source.data, np.ndarray):
-        detected_angle = getattr(image_source, "start_angle", 0.0)
+        detected_index = getattr(image_source, "index", 1)
         spot_list = findspots_data(image_source.data, params, max_spots=max_spots)
 
     else:
         raise TypeError(f"Unsupported image source type: {type(image_source)}")
 
     if xds_output is not None:
-        effective_angle = angle if angle is not None else detected_angle
-        spot_list.to_xds(xds_output, angle=effective_angle)
+        if z is not None:
+            effective_z = float(z)
+        elif index is not None:
+            effective_z = float(index) - 0.5
+        else:
+            effective_z = float(detected_index) - 0.5
+
+        spot_list.to_xds(xds_output, z=effective_z)
 
     return spot_list

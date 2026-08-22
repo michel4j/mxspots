@@ -15,7 +15,7 @@ def findspots_main():
     parser.add_argument("--json", action="store_true", help="Output results formatted as JSON")
     parser.add_argument("--xds", action="store_true", help="Export spots to SPOT.XDS in current directory")
     parser.add_argument("--xds-file", type=str, default="SPOT.XDS", help="Filename for XDS export (default: SPOT.XDS)")
-    parser.add_argument("--angle", type=float, default=None, help="Spindle rotation angle in degrees for XDS export (auto if not set)")
+    parser.add_argument("--index", type=int, default=None, help="Frame index for SPOT.XDS export (calculates z = index - 0.5, default: auto or 1)")
     parser.add_argument("--snr", type=float, default=3.0, help="SNR threshold for spot detection (default: 3.0)")
     parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
     parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
@@ -48,7 +48,7 @@ def findspots_main():
             params=params,
             max_spots=args.max_spots,
             xds_output=xds_out,
-            angle=args.angle,
+            index=args.index,
         )
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
