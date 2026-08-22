@@ -21,5 +21,6 @@ requires = ["scikit-build-core>=0.10"]
 build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
-cmake.verbose = true
+build.verbose = true
 cmake.build-type = "Release"
+wheel.packages = ["src/mxspots"]
