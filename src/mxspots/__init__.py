@@ -10,6 +10,13 @@ from .models import (
     IndexResult,
 )
 from ._lib import get_lib
+from .synthetic import (
+    SyntheticSpec,
+    SyntheticFrame,
+    load_synthetic_spec,
+    generate_synthetic_frame,
+    get_cached_synthetic_frame,
+)
 
 __version__ = "0.1.0"
 
@@ -20,5 +27,10 @@ __all__ = [
     "ScoreResult",
     "IndexResult",
     "get_lib",
+    "SyntheticSpec",
+    "SyntheticFrame",
+    "load_synthetic_spec",
+    "generate_synthetic_frame",
+    "get_cached_synthetic_frame",
     "__version__",
 ]
