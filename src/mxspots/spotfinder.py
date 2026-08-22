@@ -87,8 +87,8 @@ def findspots(
     if isinstance(image_source, SyntheticFrame):
         if params is None:
             params = SpotParams(
-                beam_x=image_source.nx / 2.0,
-                beam_y=image_source.ny / 2.0,
+                beam_x=image_source.cx,
+                beam_y=image_source.cy,
                 pixel_size_x=image_source.qx,
                 pixel_size_y=image_source.qy,
                 distance=image_source.distance,
