@@ -4,6 +4,7 @@ import sys
 import sysconfig
 from pathlib import Path
 from typing import Optional
+import numpy as np
 from .models import SpotParams
 
 
@@ -122,3 +123,14 @@ def _configure_signatures(lib: ctypes.CDLL) -> None:
 
     lib.mxspots_ping.argtypes = [ctypes.POINTER(CMxSpotsParams)]
     lib.mxspots_ping.restype = ctypes.c_int
+
+    # mxspots_find_spots signature
+    lib.mxspots_find_spots.argtypes = [
+        ctypes.POINTER(ctypes.c_float),          # data
+        ctypes.c_int,                            # nx
+        ctypes.c_int,                            # ny
+        ctypes.POINTER(CMxSpotsParams),          # params
+        ctypes.POINTER(CMxSpot),                 # out_spots
+        ctypes.c_int,                            # max_spots
+    ]
+    lib.mxspots_find_spots.restype = ctypes.c_int

@@ -17,6 +17,10 @@ from .synthetic import (
     generate_synthetic_frame,
     get_cached_synthetic_frame,
 )
+from .spotfinder import (
+    findspots,
+    findspots_data,
+)
 
 __version__ = "0.1.0"
 
@@ -32,5 +36,7 @@ __all__ = [
     "load_synthetic_spec",
     "generate_synthetic_frame",
     "get_cached_synthetic_frame",
+    "findspots",
+    "findspots_data",
     "__version__",
 ]

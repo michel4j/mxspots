@@ -56,6 +56,26 @@ MXSPOTS_API int mxspots_get_version(void);
  */
 MXSPOTS_API int mxspots_ping(const MxSpotsParams *params);
 
+/**
+ * Detect spots in a 2D float32 diffraction image.
+ *
+ * @param data       Pointer to row-major 2D float32 image array (size nx * ny).
+ * @param nx         Image width in pixels.
+ * @param ny         Image height in pixels.
+ * @param params     Spot finding parameters and experimental geometry.
+ * @param out_spots  Buffer to store detected spots (can be NULL to only count).
+ * @param max_spots  Maximum capacity of out_spots.
+ * @return           Total number of detected spots.
+ */
+MXSPOTS_API int mxspots_find_spots(
+    const float *data,
+    int nx,
+    int ny,
+    const MxSpotsParams *params,
+    MxSpot *out_spots,
+    int max_spots
+);
+
 #ifdef __cplusplus
 }
 #endif
