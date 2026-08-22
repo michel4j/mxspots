@@ -4,6 +4,10 @@
 #include <math.h>
 #include <string.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #define TILE_SIZE 32
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -55,7 +59,8 @@ int mxspots_find_spots(
         return 0;
     }
 
-    /* Pass 1: Compute tile background mean and std */
+    /* Pass 1 & 2: Multithreaded tile background mean and std calculation */
+    #pragma omp parallel for schedule(static)
     for (int ty = 0; ty < ty_count; ++ty) {
         int y_start = ty * TILE_SIZE;
         int y_end = (y_start + TILE_SIZE < ny) ? (y_start + TILE_SIZE) : ny;
@@ -146,7 +151,7 @@ int mxspots_find_spots(
         }
     }
 
-    /* Candidate pixel mask */
+    /* Candidate pixel mask - parallelized across rows */
     int total_pixels = nx * ny;
     uint8_t *mask = (uint8_t *)calloc(total_pixels, sizeof(uint8_t));
     if (mask == NULL) {
@@ -155,6 +160,7 @@ int mxspots_find_spots(
         return 0;
     }
 
+    #pragma omp parallel for schedule(static)
     for (int y = 0; y < ny; ++y) {
         int ty = y / TILE_SIZE;
         const float *row = &data[y * nx];
@@ -504,7 +510,7 @@ int mxspots_index_spots(
         n_dirs++;
     }
 
-    /* Evaluate 1D Fourier power spectrum along each direction */
+    /* Evaluate 1D Fourier power spectrum along each direction in parallel */
     CandidateBasis *candidates = (CandidateBasis *)malloc(n_dirs * sizeof(CandidateBasis));
     if (candidates == NULL) {
         free(s_vecs);
@@ -513,12 +519,13 @@ int mxspots_index_spots(
     }
 
     int n_eval_spots = (n_spots < 150) ? n_spots : 150;
-    float *proj = (float *)malloc(n_eval_spots * sizeof(float));
 
+    #pragma omp parallel for schedule(static)
     for (int d = 0; d < n_dirs; ++d) {
         Vec3 u = dirs[d];
+        float proj_local[150];
         for (int i = 0; i < n_eval_spots; ++i) {
-            proj[i] = vec3_dot(s_vecs[i], u);
+            proj_local[i] = vec3_dot(s_vecs[i], u);
         }
 
         float best_power = 0.0f;
@@ -531,7 +538,7 @@ int mxspots_index_spots(
             double two_pi_a = 2.0 * M_PI * (double)a;
 
             for (int i = 0; i < n_eval_spots; ++i) {
-                double phase = two_pi_a * (double)proj[i];
+                double phase = two_pi_a * (double)proj_local[i];
                 sum_cos += cos(phase);
                 sum_sin += sin(phase);
             }
@@ -550,7 +557,6 @@ int mxspots_index_spots(
         candidates[d].length = best_a;
     }
 
-    free(proj);
     free(dirs);
 
     /* Sort candidate basis vectors descending by Fourier power score */
