@@ -28,6 +28,8 @@ typedef struct {
     float pixel_size_y;        /* Pixel size Y (mm) */
     float distance;            /* Detector distance (mm) */
     float wavelength;          /* X-ray wavelength (Angstroms) */
+    float d_min;               /* High-resolution cutoff (Angstroms, 0 for unbounded) */
+    float d_max;               /* Low-resolution cutoff (Angstroms, e.g. 30.0) */
 } MxSpotsParams;
 
 typedef struct {

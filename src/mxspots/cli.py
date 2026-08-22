@@ -16,6 +16,8 @@ def findspots_main():
     parser.add_argument("--xds", action="store_true", help="Export spots to SPOT.XDS in current directory")
     parser.add_argument("--xds-file", type=str, default="SPOT.XDS", help="Filename for XDS export (default: SPOT.XDS)")
     parser.add_argument("--index", type=int, default=None, help="Frame index for SPOT.XDS export (calculates z = index - 0.5, default: auto or 1)")
+    parser.add_argument("--dmin", type=float, default=0.0, help="High-resolution cutoff limit in Angstroms (default: 0.0, unbounded)")
+    parser.add_argument("--dmax", type=float, default=30.0, help="Low-resolution cutoff limit in Angstroms (default: 30.0)")
     parser.add_argument("--snr", type=float, default=3.0, help="SNR threshold for spot detection (default: 3.0)")
     parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
     parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
@@ -29,7 +31,8 @@ def findspots_main():
 
     params = None
     if any([args.snr != 3.0, args.min_area != 2, args.max_area != 500, args.beam_x != 0.0,
-            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0]):
+            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0,
+            args.dmin != 0.0, args.dmax != 30.0]):
         params = SpotParams(
             snr_threshold=args.snr,
             min_spot_area=args.min_area,
@@ -38,6 +41,8 @@ def findspots_main():
             beam_y=args.beam_y,
             distance=args.distance if args.distance > 0 else 200.0,
             wavelength=args.wavelength if args.wavelength > 0 else 1.0,
+            d_min=args.dmin,
+            d_max=args.dmax,
         )
 
     xds_out = args.xds_file if args.xds else None
@@ -76,6 +81,8 @@ def score_main():
     )
     parser.add_argument("image", help="Path to diffraction image file (.cbf, .h5, .yaml, etc.)")
     parser.add_argument("--json", action="store_true", help="Output results formatted as JSON")
+    parser.add_argument("--dmin", type=float, default=0.0, help="High-resolution cutoff limit in Angstroms (default: 0.0, unbounded)")
+    parser.add_argument("--dmax", type=float, default=30.0, help="Low-resolution cutoff limit in Angstroms (default: 30.0)")
     parser.add_argument("--snr", type=float, default=3.0, help="SNR threshold for spot detection (default: 3.0)")
     parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
     parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
@@ -88,7 +95,8 @@ def score_main():
 
     params = None
     if any([args.snr != 3.0, args.min_area != 2, args.max_area != 500, args.beam_x != 0.0,
-            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0]):
+            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0,
+            args.dmin != 0.0, args.dmax != 30.0]):
         params = SpotParams(
             snr_threshold=args.snr,
             min_spot_area=args.min_area,
@@ -97,6 +105,8 @@ def score_main():
             beam_y=args.beam_y,
             distance=args.distance if args.distance > 0 else 200.0,
             wavelength=args.wavelength if args.wavelength > 0 else 1.0,
+            d_min=args.dmin,
+            d_max=args.dmax,
         )
 
     try:

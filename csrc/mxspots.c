@@ -118,6 +118,31 @@ int mxspots_find_spots(
         }
     }
 
+    /* Compute resolution radial limits */
+    float distance = (params->distance > 0.0f) ? params->distance : 100.0f;
+    float wavelength = params->wavelength;
+    float r_min_sq = 0.0f;
+    float r_max_sq = 1e30f;
+
+    if (wavelength > 0.0f && distance > 0.0f) {
+        if (params->d_max > 0.0f) {
+            float s_low = wavelength / (2.0f * params->d_max);
+            if (s_low > 0.0f && s_low < 1.0f) {
+                float theta_low = asinf(s_low);
+                float r_low = distance * tanf(2.0f * theta_low);
+                r_min_sq = r_low * r_low;
+            }
+        }
+        if (params->d_min > 0.0f) {
+            float s_high = wavelength / (2.0f * params->d_min);
+            if (s_high > 0.0f && s_high < 1.0f) {
+                float theta_high = asinf(s_high);
+                float r_high = distance * tanf(2.0f * theta_high);
+                r_max_sq = r_high * r_high;
+            }
+        }
+    }
+
     /* Candidate pixel mask */
     int total_pixels = nx * ny;
     uint8_t *mask = (uint8_t *)calloc(total_pixels, sizeof(uint8_t));
@@ -131,8 +156,17 @@ int mxspots_find_spots(
         int ty = y / TILE_SIZE;
         const float *row = &data[y * nx];
         uint8_t *mask_row = &mask[y * nx];
+        float ry = (y - params->beam_y) * params->pixel_size_y;
+        float ry2 = ry * ry;
 
         for (int x = 0; x < nx; ++x) {
+            float rx = (x - params->beam_x) * params->pixel_size_x;
+            float r2 = rx * rx + ry2;
+
+            if (r2 < r_min_sq || r2 > r_max_sq) {
+                continue;
+            }
+
             int tx = x / TILE_SIZE;
             int t_idx = ty * tx_count + tx;
             float v = row[x];
@@ -235,6 +269,13 @@ int mxspots_find_spots(
                 float d = (sin_theta > 1e-6f && params->wavelength > 0.0f)
                               ? (params->wavelength / (2.0f * sin_theta))
                               : 999.0f;
+
+                if (params->d_min > 0.0f && d < params->d_min) {
+                    continue;
+                }
+                if (params->d_max > 0.0f && d > params->d_max) {
+                    continue;
+                }
 
                 if (spot_count >= spot_capacity) {
                     spot_capacity *= 2;

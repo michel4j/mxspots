@@ -15,6 +15,8 @@ class SpotParams:
     pixel_size_y: float = 0.075  # mm
     distance: float = 200.0      # mm
     wavelength: float = 1.0      # Angstroms
+    d_min: float = 0.0           # Angstroms (0 for unbounded)
+    d_max: float = 30.0          # Angstroms
 
 
 @dataclass(frozen=True)

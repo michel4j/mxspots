@@ -4,7 +4,6 @@ import sys
 import sysconfig
 from pathlib import Path
 from typing import Optional
-import numpy as np
 from .models import SpotParams
 
 
@@ -19,6 +18,8 @@ class CMxSpotsParams(ctypes.Structure):
         ("pixel_size_y", ctypes.c_float),
         ("distance", ctypes.c_float),
         ("wavelength", ctypes.c_float),
+        ("d_min", ctypes.c_float),
+        ("d_max", ctypes.c_float),
     ]
 
     @classmethod
@@ -33,6 +34,8 @@ class CMxSpotsParams(ctypes.Structure):
             pixel_size_y=ctypes.c_float(params.pixel_size_y),
             distance=ctypes.c_float(params.distance),
             wavelength=ctypes.c_float(params.wavelength),
+            d_min=ctypes.c_float(params.d_min),
+            d_max=ctypes.c_float(params.d_max),
         )
 
 
@@ -55,100 +58,87 @@ class CMxScoreResult(ctypes.Structure):
     ]
 
 
+_LIB_CACHE: Optional[ctypes.CDLL] = None
+
+
 def _find_library() -> Path:
-    """Locate the compiled libmxspots shared library."""
-    current_dir = Path(__file__).resolve().parent
-    repo_root = current_dir.parent.parent
-    build_dir = repo_root / "build"
+    """Find the compiled libmxspots shared library."""
+    lib_name = "libmxspots.so" if sys.platform != "win32" else "mxspots.dll"
+    if sys.platform == "darwin":
+        lib_name = "libmxspots.dylib"
 
-    search_dirs = [
-        current_dir,
-        current_dir / "lib",
-        build_dir,
-        build_dir / "csrc",
+    possible_dirs = [
+        # In platlib directory where wheel/pip places extension modules
+        Path(sysconfig.get_path("platlib")) / "mxspots",
+        Path(sysconfig.get_path("purelib")) / "mxspots",
+        # In editable install build directory
+        Path(__file__).resolve().parent.parent.parent / "build",
+        # In package directory directly
+        Path(__file__).resolve().parent,
+        # System/Current directory
+        Path("."),
     ]
 
-    # Include virtualenv/site-packages locations (e.g. editable installs)
-    for path_name in ("platlib", "purelib"):
-        try:
-            p = Path(sysconfig.get_path(path_name)) / "mxspots"
-            if p not in search_dirs:
-                search_dirs.append(p)
-        except Exception:
-            pass
-
-    lib_names = [
-        "libmxspots.so",
-        "libmxspots.dylib",
-        "mxspots.dll",
-        "libmxspots.dll",
-        "mxspots.so",
-    ]
-
-    for directory in search_dirs:
-        for lib_name in lib_names:
-            candidate = directory / lib_name
-            if candidate.is_file():
-                return candidate
-
-    # Search dynamically in system library path
-    import ctypes.util
-    found = ctypes.util.find_library("mxspots")
-    if found:
-        return Path(found)
+    for d in possible_dirs:
+        # Check direct path
+        candidate = d / lib_name
+        if candidate.is_file():
+            return candidate
+        # Recursively look in build folders
+        for match in d.glob(f"**/{lib_name}"):
+            if match.is_file():
+                return match
 
     raise FileNotFoundError(
-        "Could not find compiled libmxspots shared library. "
-        "Please build the project using 'pip install .' or CMake."
+        f"Could not locate {lib_name}. Please build or install the package with `pip install .`"
     )
 
 
-_lib: Optional[ctypes.CDLL] = None
-
-
 def get_lib() -> ctypes.CDLL:
-    """Get or load the libmxspots CDLL handle."""
-    global _lib
-    if _lib is None:
-        lib_path = _find_library()
-        _lib = ctypes.CDLL(str(lib_path))
-        _configure_signatures(_lib)
-    return _lib
+    """Load and return the libmxspots ctypes CDLL handle with bound function prototypes."""
+    global _LIB_CACHE
+    if _LIB_CACHE is not None:
+        return _LIB_CACHE
 
+    lib_path = _find_library()
+    lib = ctypes.CDLL(str(lib_path))
 
-def _configure_signatures(lib: ctypes.CDLL) -> None:
-    """Configure argtypes and restype for C functions."""
+    # Version check
     lib.mxspots_get_version.argtypes = []
     lib.mxspots_get_version.restype = ctypes.c_int
 
+    # Ping check
     lib.mxspots_ping.argtypes = [ctypes.POINTER(CMxSpotsParams)]
     lib.mxspots_ping.restype = ctypes.c_int
 
-    # mxspots_find_spots signature
+    # Find spots
     lib.mxspots_find_spots.argtypes = [
-        ctypes.POINTER(ctypes.c_float),          # data
-        ctypes.c_int,                            # nx
-        ctypes.c_int,                            # ny
-        ctypes.POINTER(CMxSpotsParams),          # params
-        ctypes.POINTER(CMxSpot),                 # out_spots
-        ctypes.c_int,                            # max_spots
+        ctypes.POINTER(ctypes.c_float),        # data
+        ctypes.c_int,                          # nx
+        ctypes.c_int,                          # ny
+        ctypes.POINTER(CMxSpotsParams),        # params
+        ctypes.POINTER(CMxSpot),               # out_spots
+        ctypes.c_int,                          # max_spots
     ]
     lib.mxspots_find_spots.restype = ctypes.c_int
 
-    # mxspots_score_spots signature
+    # Score spots
     lib.mxspots_score_spots.argtypes = [
-        ctypes.POINTER(CMxSpot),                 # spots
-        ctypes.c_int,                            # spot_count
-        ctypes.POINTER(CMxScoreResult),          # out_score
+        ctypes.POINTER(CMxSpot),               # spots
+        ctypes.c_int,                          # spot_count
+        ctypes.POINTER(CMxScoreResult),        # out_score
     ]
     lib.mxspots_score_spots.restype = ctypes.c_int
 
-    # mxspots_score_frame signature
+    # Score frame directly
     lib.mxspots_score_frame.argtypes = [
-        ctypes.POINTER(ctypes.c_float),          # data
-        ctypes.c_int,                            # nx
-        ctypes.c_int,                            # ny
-        ctypes.POINTER(CMxSpotsParams),          # params
-        ctypes.POINTER(CMxScoreResult),          # out_score
+        ctypes.POINTER(ctypes.c_float),        # data
+        ctypes.c_int,                          # nx
+        ctypes.c_int,                          # ny
+        ctypes.POINTER(CMxSpotsParams),        # params
+        ctypes.POINTER(CMxScoreResult),        # out_score
     ]
     lib.mxspots_score_frame.restype = ctypes.c_int
+
+    _LIB_CACHE = lib
+    return _LIB_CACHE
