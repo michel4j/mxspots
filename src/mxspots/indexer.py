@@ -1,32 +1,38 @@
 import ctypes
 from pathlib import Path
 from typing import Optional, Union, Any, List
-
-import mxio
 import numpy as np
-from .models import SpotParams, Spot, SpotList, ScoreResult
-from ._lib import get_lib, CMxSpotsParams, CMxSpot, CMxScoreResult
+from .models import SpotParams, Spot, SpotList, IndexResult
+from ._lib import get_lib, CMxSpotsParams, CMxSpot, CMxIndexResult
 from .synthetic import SyntheticFrame, generate_synthetic_frame
 
+import mxio
 
-def score_spots(
+
+def index_spots(
     spots: Union[SpotList, List[Spot]],
-) -> ScoreResult:
+    params: Optional[SpotParams] = None,
+) -> IndexResult:
     """
-    Compute quality metrics from a list of detected spots.
+    Index a list of detected spots using reciprocal lattice FFT search.
     """
+    if params is None:
+        params = SpotParams()
+
     spot_objs = spots.spots if isinstance(spots, SpotList) else list(spots)
     spot_count = len(spot_objs)
 
     if spot_count == 0:
-        return ScoreResult(
-            spot_count=0,
-            avg_snr=0.0,
-            d_min=999.0,
-            percentage_indexed=None,
+        return IndexResult(
+            unit_cell=[50.0, 50.0, 50.0, 90.0, 90.0, 90.0],
+            percentage_indexed=0.0,
+            indexed_spot_count=0,
+            total_spot_count=0,
         )
 
     lib = get_lib()
+    c_params = CMxSpotsParams.from_params(params)
+
     c_spots = (CMxSpot * spot_count)()
     for i, s in enumerate(spot_objs):
         c_spots[i].x = ctypes.c_float(s.x)
@@ -35,30 +41,32 @@ def score_spots(
         c_spots[i].intensity = ctypes.c_float(s.intensity)
         c_spots[i].snr = ctypes.c_float(s.snr)
 
-    out_score = CMxScoreResult()
-    ret = lib.mxspots_score_spots(
+    c_result = CMxIndexResult()
+    ret = lib.mxspots_index_spots(
         c_spots,
         spot_count,
-        ctypes.byref(out_score),
+        ctypes.byref(c_params),
+        ctypes.byref(c_result),
     )
 
     if ret != 0:
-        raise RuntimeError(f"Error computing spot quality score (code {ret})")
+        raise RuntimeError(f"mxspots_index_spots failed with error code {ret}")
 
-    return ScoreResult(
-        spot_count=int(out_score.spot_count),
-        avg_snr=float(out_score.avg_snr),
-        d_min=float(out_score.d_min),
-        percentage_indexed=float(out_score.percentage_indexed) if out_score.percentage_indexed > 0.0 else None,
+    cell = [float(c_result.unit_cell[i]) for i in range(6)]
+    return IndexResult(
+        unit_cell=cell,
+        percentage_indexed=float(c_result.percentage_indexed),
+        indexed_spot_count=int(c_result.indexed_spot_count),
+        total_spot_count=int(c_result.total_spot_count),
     )
 
 
-def score_data(
+def index_data(
     data: np.ndarray,
     params: Optional[SpotParams] = None,
-) -> ScoreResult:
+) -> IndexResult:
     """
-    Compute quality metrics for a 2D float32 image array.
+    Find spots and perform lattice indexing on a 2D float32 NumPy image array.
     """
     if params is None:
         params = SpotParams()
@@ -73,41 +81,40 @@ def score_data(
 
     ny, nx = data.shape
     lib = get_lib()
-
     c_params = CMxSpotsParams.from_params(params)
     data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
 
-    out_score = CMxScoreResult()
-    ret = lib.mxspots_score_frame(
+    c_result = CMxIndexResult()
+    ret = lib.mxspots_index_frame(
         data_ptr,
         nx,
         ny,
         ctypes.byref(c_params),
-        ctypes.byref(out_score),
+        ctypes.byref(c_result),
     )
 
     if ret != 0:
-        raise RuntimeError(f"Error computing frame quality score (code {ret})")
+        raise RuntimeError(f"mxspots_index_frame failed with error code {ret}")
 
-    return ScoreResult(
-        spot_count=int(out_score.spot_count),
-        avg_snr=float(out_score.avg_snr),
-        d_min=float(out_score.d_min),
-        percentage_indexed=float(out_score.percentage_indexed) if out_score.percentage_indexed > 0.0 else None,
+    cell = [float(c_result.unit_cell[i]) for i in range(6)]
+    return IndexResult(
+        unit_cell=cell,
+        percentage_indexed=float(c_result.percentage_indexed),
+        indexed_spot_count=int(c_result.indexed_spot_count),
+        total_spot_count=int(c_result.total_spot_count),
     )
 
 
-def score(
+def index(
     image_source: Union[str, Path, SyntheticFrame, Any],
     params: Optional[SpotParams] = None,
-) -> ScoreResult:
+) -> IndexResult:
     """
-    Load an image frame and compute quality score metrics.
-    :param image_source: Image source, Supports file paths (.cbf, .h5, .yaml, etc.), mxio
-    ImageFrame and DataSet objects, and SyntheticFrame objects.
+    Load an image frame, find diffraction spots, and index the reciprocal lattice.
+
+    :param image_source: Image source (.cbf, .h5, .yaml, mxio DataSet/ImageFrame, or SyntheticFrame)
     :param params: SpotParams object, defaults to None
     """
-
     if isinstance(image_source, (str, Path)):
         p = Path(image_source)
         if p.is_file() and p.suffix.lower() in (".yaml", ".yml"):
@@ -128,7 +135,7 @@ def score(
                 distance=image_source.distance,
                 wavelength=image_source.wavelength,
             )
-        return score_data(image_source.data, params=params)
+        return index_data(image_source.data, params=params)
 
     # mxio.DataSet directly
     if isinstance(image_source, mxio.DataSet):
@@ -145,7 +152,9 @@ def score(
                 distance=image_source.distance,
                 wavelength=image_source.wavelength,
             )
+        return index_data(image_source.data, params=params)
 
-        return score_data(image_source.data, params=params)
+    if hasattr(image_source, "data") and isinstance(image_source.data, np.ndarray):
+        return index_data(image_source.data, params=params)
 
     raise TypeError(f"Unsupported image source type: {type(image_source)}")

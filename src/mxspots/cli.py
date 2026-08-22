@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from .spotfinder import findspots
 from .scorer import score
+from .indexer import index
 from .models import SpotParams
 
 
@@ -128,4 +129,52 @@ def score_main():
 
 
 def index_main():
-    print("mxspots.index - FFT lattice indexing engine")
+    parser = argparse.ArgumentParser(
+        prog="mxspots.index",
+        description="Index reciprocal lattice and estimate unit cell from an MX diffraction image",
+    )
+    parser.add_argument("image", help="Path to diffraction image file (.cbf, .h5, .yaml, etc.)")
+    parser.add_argument("--json", action="store_true", help="Output results formatted as JSON")
+    parser.add_argument("--dmin", type=float, default=0.0, help="High-resolution cutoff limit in Angstroms (default: 0.0, unbounded)")
+    parser.add_argument("--dmax", type=float, default=30.0, help="Low-resolution cutoff limit in Angstroms (default: 30.0)")
+    parser.add_argument("--snr", type=float, default=3.0, help="SNR threshold for spot detection (default: 3.0)")
+    parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
+    parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
+    parser.add_argument("--beam-x", type=float, default=0.0, help="Detector beam center X in pixels (0 for auto)")
+    parser.add_argument("--beam-y", type=float, default=0.0, help="Detector beam center Y in pixels (0 for auto)")
+    parser.add_argument("--distance", type=float, default=0.0, help="Detector distance in mm (0 for auto)")
+    parser.add_argument("--wavelength", type=float, default=0.0, help="Wavelength in Angstroms (0 for auto)")
+
+    args = parser.parse_args()
+
+    params = None
+    if any([args.snr != 3.0, args.min_area != 2, args.max_area != 500, args.beam_x != 0.0,
+            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0,
+            args.dmin != 0.0, args.dmax != 30.0]):
+        params = SpotParams(
+            snr_threshold=args.snr,
+            min_spot_area=args.min_area,
+            max_spot_area=args.max_area,
+            beam_x=args.beam_x,
+            beam_y=args.beam_y,
+            distance=args.distance if args.distance > 0 else 200.0,
+            wavelength=args.wavelength if args.wavelength > 0 else 1.0,
+            d_min=args.dmin,
+            d_max=args.dmax,
+        )
+
+    try:
+        index_res = index(args.image, params=params)
+    except Exception as e:
+        sys.stderr.write(f"Error: {e}\n")
+        sys.exit(1)
+
+    if args.json:
+        print(index_res.to_json(indent=2))
+    else:
+        a, b, c, alpha, beta, gamma = index_res.unit_cell
+        print(f"Lattice Indexing for {args.image}:")
+        print(f"  Unit Cell:          a={a:.2f} Å, b={b:.2f} Å, c={c:.2f} Å")
+        print(f"                      α={alpha:.1f}°, β={beta:.1f}°, γ={gamma:.1f}°")
+        print(f"  Indexed Spots:      {index_res.indexed_spot_count} / {index_res.total_spot_count}")
+        print(f"  Percentage Indexed: {index_res.percentage_indexed:.1f}%")

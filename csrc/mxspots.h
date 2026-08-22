@@ -47,6 +47,13 @@ typedef struct {
     float percentage_indexed;
 } MxScoreResult;
 
+typedef struct {
+    float unit_cell[6];        /* a, b, c (Angstroms), alpha, beta, gamma (degrees) */
+    float percentage_indexed;  /* 0.0 - 100.0 % */
+    int indexed_spot_count;    /* Number of spots matching lattice */
+    int total_spot_count;      /* Total number of spots evaluated */
+} MxIndexResult;
+
 /**
  * Returns the version number of libmxspots.
  */
@@ -108,6 +115,40 @@ MXSPOTS_API int mxspots_score_frame(
     int ny,
     const MxSpotsParams *params,
     MxScoreResult *out_score
+);
+
+/**
+ * Index a list of detected spots using 1D/3D reciprocal lattice FFT search.
+ *
+ * @param spots      Array of detected spots.
+ * @param spot_count Number of spots in array.
+ * @param params     Experimental geometry parameters.
+ * @param out_index  Pointer to MxIndexResult struct to receive unit cell and percentage indexed.
+ * @return           0 on success, non-zero on error.
+ */
+MXSPOTS_API int mxspots_index_spots(
+    const MxSpot *spots,
+    int spot_count,
+    const MxSpotsParams *params,
+    MxIndexResult *out_index
+);
+
+/**
+ * Find spots and index lattice directly from a 2D float32 diffraction image.
+ *
+ * @param data       Pointer to row-major 2D float32 image array (size nx * ny).
+ * @param nx         Image width in pixels.
+ * @param ny         Image height in pixels.
+ * @param params     Spot finding parameters and experimental geometry.
+ * @param out_index  Pointer to MxIndexResult struct to receive unit cell and percentage indexed.
+ * @return           0 on success, non-zero on error.
+ */
+MXSPOTS_API int mxspots_index_frame(
+    const float *data,
+    int nx,
+    int ny,
+    const MxSpotsParams *params,
+    MxIndexResult *out_index
 );
 
 #ifdef __cplusplus

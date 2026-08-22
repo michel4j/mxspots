@@ -58,6 +58,15 @@ class CMxScoreResult(ctypes.Structure):
     ]
 
 
+class CMxIndexResult(ctypes.Structure):
+    _fields_ = [
+        ("unit_cell", ctypes.c_float * 6),
+        ("percentage_indexed", ctypes.c_float),
+        ("indexed_spot_count", ctypes.c_int),
+        ("total_spot_count", ctypes.c_int),
+    ]
+
+
 _LIB_CACHE: Optional[ctypes.CDLL] = None
 
 
@@ -139,6 +148,25 @@ def get_lib() -> ctypes.CDLL:
         ctypes.POINTER(CMxScoreResult),        # out_score
     ]
     lib.mxspots_score_frame.restype = ctypes.c_int
+
+    # Index spots
+    lib.mxspots_index_spots.argtypes = [
+        ctypes.POINTER(CMxSpot),               # spots
+        ctypes.c_int,                          # spot_count
+        ctypes.POINTER(CMxSpotsParams),        # params
+        ctypes.POINTER(CMxIndexResult),        # out_index
+    ]
+    lib.mxspots_index_spots.restype = ctypes.c_int
+
+    # Index frame directly
+    lib.mxspots_index_frame.argtypes = [
+        ctypes.POINTER(ctypes.c_float),        # data
+        ctypes.c_int,                          # nx
+        ctypes.c_int,                          # ny
+        ctypes.POINTER(CMxSpotsParams),        # params
+        ctypes.POINTER(CMxIndexResult),        # out_index
+    ]
+    lib.mxspots_index_frame.restype = ctypes.c_int
 
     _LIB_CACHE = lib
     return _LIB_CACHE
