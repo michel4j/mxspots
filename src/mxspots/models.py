@@ -92,6 +92,9 @@ class ScoreResult:
     d_min: float
     percentage_indexed: Optional[float] = None
     indexed_spot_count: Optional[int] = None
+    percentage_regular: Optional[float] = None
+    regular_spot_count: Optional[int] = None
+    num_lattices: Optional[int] = None
     ice_score: Optional[float] = None
     ice_rings_detected: Optional[List[float]] = None
     score: float = 0.0

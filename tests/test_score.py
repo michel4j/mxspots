@@ -21,6 +21,12 @@ def test_score_clean_frame(test_data_dir):
     assert result.percentage_indexed is not None
     assert result.indexed_spot_count is not None
     assert result.indexed_spot_count > 0
+    assert result.percentage_regular is not None
+    assert result.percentage_regular > 0.0
+    assert result.regular_spot_count is not None
+    assert result.regular_spot_count > 0
+    assert result.num_lattices is not None
+    assert result.num_lattices >= 1
 
 
 def test_score_data_empty():
@@ -35,6 +41,9 @@ def test_score_data_empty():
     assert result.score == pytest.approx(0.0)
     assert result.percentage_indexed is None
     assert result.indexed_spot_count is None
+    assert result.percentage_regular is None
+    assert result.regular_spot_count is None
+    assert result.num_lattices is None
 
 
 def test_score_spots_auto_indexing():
@@ -59,6 +68,8 @@ def test_score_spots_auto_indexing():
     assert result.avg_snr == pytest.approx(25.0)
     assert result.d_min == pytest.approx(2.5)
     assert result.score > 0.0
+    assert result.percentage_regular is not None
+    assert result.num_lattices is not None
 
 
 def test_score_ice_frame_metrics(test_data_dir):
