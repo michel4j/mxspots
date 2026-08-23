@@ -28,21 +28,33 @@
 
 ## Installation
 
-### Prerequisites
+### Binary Wheels (Recommended)
 
-- **Python**: Version 3.12 or later
-- **C Compiler**: GCC, Clang, or MSVC with OpenMP support
-- **CMake**: Version 3.18 or later
+Pre-compiled binary wheels are available for standard Linux systems (`manylinux_2_28` and `musllinux_1_2` across `x86_64` and `aarch64` on Python 3.12+):
+
+```bash
+pip install mxspots
+```
 
 ### Install from Source
+
+When installing from source or building custom binaries:
+
+- **Prerequisites**:
+  - Python 3.12 or later
+  - C Compiler (GCC, Clang, or MSVC) with OpenMP support
+  - CMake 3.18 or later
 
 ```bash
 # Clone the repository
 git clone https://github.com/michel4j/mxspots.git
 cd mxspots
 
-# Install package with pip
+# Install package with pip (portable build by default)
 pip install .
+
+# For host-optimized build (-march=native)
+pip install . --config-settings=cmake.define.ENABLE_NATIVE_TUNING=ON
 
 # For development (including test dependencies)
 pip install -e ".[dev]"
@@ -202,7 +214,7 @@ $$\text{Score} = \begin{cases} 0.0 & \text{if } N_{\text{bragg}} = 0 \\ \text{cl
 
 where the logit $z$ is computed from:
 - **Bragg Spot Count ($N_{\text{bragg}}$)**: Logarithmic scaling $\ln(1 + N_{\text{bragg}})$
-- **Bragg Spot Fraction ($P_{\text{bragg}}$)**: Linear weighting of lattice conformity
+- **Bragg Spot Fraction ($P_{\\text{bragg}}$)**: Linear weighting of lattice conformity
 - **Average Bragg Intensity ($I_{\text{bragg}}$)**: Logarithmic intensity scaling $\ln(1 + I_{\text{bragg}} / 50)$
 - **Signal-to-Noise Ratio ($\text{SNR}$)**: Logarithmic peak quality $\ln(1 + \text{SNR})$
 - **Bragg Resolution Limit ($d_{95}$)**: Linear scaling between $4.0\,\text{Å}$ and $1.2\,\text{Å}$
