@@ -33,3 +33,6 @@ build.verbose = true
 cmake.build-type = "Release"
 wheel.packages = ["src/mxspots"]
 sdist.include = ["tests/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
