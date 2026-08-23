@@ -144,6 +144,30 @@ def findspots_data(
     if data.ndim != 2:
         raise ValueError(f"Expected 2D image array, got {data.ndim}D shape {data.shape}")
 
+    detected_ice_rings: Optional[List[IceRing]] = None
+    if params.ice_mask:
+        detected_ice_rings, _ = detect_ice_rings_data(data, params=params)
+        if detected_ice_rings:
+            active_masked = list(params.masked_rings) if params.masked_rings is not None else []
+            for ring in detected_ice_rings:
+                active_masked.append((ring.d_min, ring.d_max))
+            params = SpotParams(
+                snr_threshold=params.snr_threshold,
+                min_spot_area=params.min_spot_area,
+                max_spot_area=params.max_spot_area,
+                beam_x=params.beam_x,
+                beam_y=params.beam_y,
+                pixel_size_x=params.pixel_size_x,
+                pixel_size_y=params.pixel_size_y,
+                distance=params.distance,
+                wavelength=params.wavelength,
+                d_min=params.d_min,
+                d_max=params.d_max,
+                ice_mask=params.ice_mask,
+                ice_sensitivity=params.ice_sensitivity,
+                masked_rings=active_masked,
+            )
+
     ny, nx = data.shape
     lib = get_lib()
 
@@ -184,7 +208,7 @@ def findspots_data(
         for i in range(actual_count)
     ]
 
-    return SpotList(spots=spots)
+    return SpotList(spots=spots, ice_rings=detected_ice_rings)
 
 
 def findspots(

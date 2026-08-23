@@ -27,24 +27,24 @@ def findspots_main():
     parser.add_argument("--beam-y", type=float, default=0.0, help="Detector beam center Y in pixels (0 for auto)")
     parser.add_argument("--distance", type=float, default=0.0, help="Detector distance in mm (0 for auto)")
     parser.add_argument("--wavelength", type=float, default=0.0, help="Wavelength in Angstroms (0 for auto)")
+    parser.add_argument("--no-ice-mask", action="store_true", help="Disable automated ice ring detection and masking")
+    parser.add_argument("--ice-sensitivity", type=float, default=3.0, help="Ice ring detection sensitivity threshold (default: 3.0)")
 
     args = parser.parse_args()
 
-    params = None
-    if any([args.snr != 3.0, args.min_area != 2, args.max_area != 500, args.beam_x != 0.0,
-            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0,
-            args.dmin != 0.0, args.dmax != 30.0]):
-        params = SpotParams(
-            snr_threshold=args.snr,
-            min_spot_area=args.min_area,
-            max_spot_area=args.max_area,
-            beam_x=args.beam_x,
-            beam_y=args.beam_y,
-            distance=args.distance,
-            wavelength=args.wavelength,
-            d_min=args.dmin,
-            d_max=args.dmax,
-        )
+    params = SpotParams(
+        snr_threshold=args.snr,
+        min_spot_area=args.min_area,
+        max_spot_area=args.max_area,
+        beam_x=args.beam_x,
+        beam_y=args.beam_y,
+        distance=args.distance,
+        wavelength=args.wavelength,
+        d_min=args.dmin,
+        d_max=args.dmax,
+        ice_mask=not args.no_ice_mask,
+        ice_sensitivity=args.ice_sensitivity,
+    )
 
     xds_out = args.xds_file if args.xds else None
 
@@ -64,6 +64,9 @@ def findspots_main():
         print(spot_list.to_json(indent=2))
     else:
         print(f"Found {spot_list.count} spots in {args.image}:")
+        if spot_list.ice_rings:
+            ring_strs = [f"{r.d_spacing:.2f} Å" for r in spot_list.ice_rings]
+            print(f"  Detected Ice Rings: {len(spot_list.ice_rings)} ({', '.join(ring_strs)})")
         print(f"{'Index':<6} {'X (px)':<10} {'Y (px)':<10} {'d (Å)':<10} {'Intensity':<12} {'SNR':<8}")
         print("-" * 60)
         display_spots = spot_list.spots[:20]
@@ -91,24 +94,24 @@ def score_main():
     parser.add_argument("--beam-y", type=float, default=0.0, help="Detector beam center Y in pixels (0 for auto)")
     parser.add_argument("--distance", type=float, default=0.0, help="Detector distance in mm (0 for auto)")
     parser.add_argument("--wavelength", type=float, default=0.0, help="Wavelength in Angstroms (0 for auto)")
+    parser.add_argument("--no-ice-mask", action="store_true", help="Disable automated ice ring detection and masking")
+    parser.add_argument("--ice-sensitivity", type=float, default=3.0, help="Ice ring detection sensitivity threshold (default: 3.0)")
 
     args = parser.parse_args()
 
-    params = None
-    if any([args.snr != 3.0, args.min_area != 2, args.max_area != 500, args.beam_x != 0.0,
-            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0,
-            args.dmin != 0.0, args.dmax != 30.0]):
-        params = SpotParams(
-            snr_threshold=args.snr,
-            min_spot_area=args.min_area,
-            max_spot_area=args.max_area,
-            beam_x=args.beam_x,
-            beam_y=args.beam_y,
-            distance=args.distance,
-            wavelength=args.wavelength,
-            d_min=args.dmin,
-            d_max=args.dmax,
-        )
+    params = SpotParams(
+        snr_threshold=args.snr,
+        min_spot_area=args.min_area,
+        max_spot_area=args.max_area,
+        beam_x=args.beam_x,
+        beam_y=args.beam_y,
+        distance=args.distance,
+        wavelength=args.wavelength,
+        d_min=args.dmin,
+        d_max=args.dmax,
+        ice_mask=not args.no_ice_mask,
+        ice_sensitivity=args.ice_sensitivity,
+    )
 
     try:
         score_res = score(args.image, params=params)
@@ -124,6 +127,10 @@ def score_main():
         print(f"  Average SNR:        {score_res.avg_snr:.2f}")
         d_min_str = f"{score_res.d_min:.2f} Å" if score_res.d_min < 900.0 else "N/A"
         print(f"  Resolution Limit:   {d_min_str}")
+        if score_res.ice_score is not None:
+            print(f"  Ice Score:          {score_res.ice_score:.2f}")
+        if score_res.ice_rings_detected is not None:
+            print(f"  Ice Rings Detected: {len(score_res.ice_rings_detected)}")
         if score_res.percentage_indexed is not None:
             print(f"  Percentage Indexed: {score_res.percentage_indexed:.1f}%")
 
@@ -144,24 +151,24 @@ def index_main():
     parser.add_argument("--beam-y", type=float, default=0.0, help="Detector beam center Y in pixels (0 for auto)")
     parser.add_argument("--distance", type=float, default=0.0, help="Detector distance in mm (0 for auto)")
     parser.add_argument("--wavelength", type=float, default=0.0, help="Wavelength in Angstroms (0 for auto)")
+    parser.add_argument("--no-ice-mask", action="store_true", help="Disable automated ice ring detection and masking")
+    parser.add_argument("--ice-sensitivity", type=float, default=3.0, help="Ice ring detection sensitivity threshold (default: 3.0)")
 
     args = parser.parse_args()
 
-    params = None
-    if any([args.snr != 3.0, args.min_area != 2, args.max_area != 500, args.beam_x != 0.0,
-            args.beam_y != 0.0, args.distance != 0.0, args.wavelength != 0.0,
-            args.dmin != 0.0, args.dmax != 30.0]):
-        params = SpotParams(
-            snr_threshold=args.snr,
-            min_spot_area=args.min_area,
-            max_spot_area=args.max_area,
-            beam_x=args.beam_x,
-            beam_y=args.beam_y,
-            distance=args.distance,
-            wavelength=args.wavelength,
-            d_min=args.dmin,
-            d_max=args.dmax,
-        )
+    params = SpotParams(
+        snr_threshold=args.snr,
+        min_spot_area=args.min_area,
+        max_spot_area=args.max_area,
+        beam_x=args.beam_x,
+        beam_y=args.beam_y,
+        distance=args.distance,
+        wavelength=args.wavelength,
+        d_min=args.dmin,
+        d_max=args.dmax,
+        ice_mask=not args.no_ice_mask,
+        ice_sensitivity=args.ice_sensitivity,
+    )
 
     try:
         index_res = index(args.image, params=params)

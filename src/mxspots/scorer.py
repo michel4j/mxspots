@@ -6,7 +6,7 @@ import numpy as np
 from .models import SpotParams, Spot, SpotList, ScoreResult
 from ._lib import get_lib, CMxSpotsParams, CMxSpot, CMxScoreResult
 from .synthetic import SyntheticFrame
-from .spotfinder import extract_frame_and_params
+from .spotfinder import extract_frame_and_params, detect_ice_rings_data
 
 
 def score_spots(
@@ -71,6 +71,34 @@ def score_data(
     if data.ndim != 2:
         raise ValueError(f"Expected 2D image array, got {data.ndim}D shape {data.shape}")
 
+    ice_score: Optional[float] = None
+    ice_rings_detected: Optional[List[float]] = None
+
+    if params.ice_mask:
+        detected_rings, score_val = detect_ice_rings_data(data, params=params)
+        ice_score = score_val
+        ice_rings_detected = [r.d_spacing for r in detected_rings]
+        if detected_rings:
+            active_masked = list(params.masked_rings) if params.masked_rings is not None else []
+            for ring in detected_rings:
+                active_masked.append((ring.d_min, ring.d_max))
+            params = SpotParams(
+                snr_threshold=params.snr_threshold,
+                min_spot_area=params.min_spot_area,
+                max_spot_area=params.max_spot_area,
+                beam_x=params.beam_x,
+                beam_y=params.beam_y,
+                pixel_size_x=params.pixel_size_x,
+                pixel_size_y=params.pixel_size_y,
+                distance=params.distance,
+                wavelength=params.wavelength,
+                d_min=params.d_min,
+                d_max=params.d_max,
+                ice_mask=params.ice_mask,
+                ice_sensitivity=params.ice_sensitivity,
+                masked_rings=active_masked,
+            )
+
     ny, nx = data.shape
     lib = get_lib()
 
@@ -94,6 +122,8 @@ def score_data(
         avg_snr=float(out_score.avg_snr),
         d_min=float(out_score.d_min),
         percentage_indexed=float(out_score.percentage_indexed) if out_score.percentage_indexed > 0.0 else None,
+        ice_score=ice_score,
+        ice_rings_detected=ice_rings_detected,
     )
 
 

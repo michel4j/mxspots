@@ -161,7 +161,7 @@ int mxspots_ping(const MxSpotsParams *params) {
     return 0;
 }
 
-static int compare_spots_desc(const void *a, const void *b) {\
+static int compare_spots_desc(const void *a, const void *b) {
     const MxSpot *sa = (const MxSpot *)a;
     const MxSpot *sb = (const MxSpot *)b;
     if (sb->intensity > sa->intensity) return 1;
@@ -169,7 +169,7 @@ static int compare_spots_desc(const void *a, const void *b) {\
     return 0;
 }
 
-MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {\
+MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {
     if (max_nx <= 0 || max_ny <= 0) {
         return NULL;
     }
@@ -333,13 +333,25 @@ int mxspots_find_spots_ctx(
                 continue;
             }
 
+            /* Check masked ice rings */
+            int is_masked = 0;
+            for (int k = 0; k < params->num_masked_rings; ++k) {
+                if (r2 >= params->masked_rings_r2[k][0] && r2 <= params->masked_rings_r2[k][1]) {
+                    is_masked = 1;
+                    break;
+                }
+            }
+            if (is_masked) {
+                continue;
+            }
+
             float v = row[x];
             if (v <= 0.0f) {
                 continue;
             }
 
             float bg, std;
-            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);\
+            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);
 
             float threshold = bg + params->snr_threshold * std;
             if (v > threshold) {
@@ -469,7 +481,20 @@ int mxspots_find_spots_ctx(
 
                 float rx = (cx - beam_x) * pixel_size_x;
                 float ry = (cy - beam_y) * pixel_size_y;
-                float r = sqrtf(rx * rx + ry * ry);
+                float r2 = rx * rx + ry * ry;
+
+                int spot_masked = 0;
+                for (int k = 0; k < params->num_masked_rings; ++k) {
+                    if (r2 >= params->masked_rings_r2[k][0] && r2 <= params->masked_rings_r2[k][1]) {
+                        spot_masked = 1;
+                        break;
+                    }
+                }
+                if (spot_masked) {
+                    continue;
+                }
+
+                float r = sqrtf(r2);
                 float theta = 0.5f * atan2f(r, distance);
                 float sin_theta = sinf(theta);
                 float d = (sin_theta > 1e-6f && wavelength > 0.0f)
@@ -682,7 +707,7 @@ int mxspots_index_spots(
     int n_dirs = 0;
 
     if (dirs == NULL) {
-        free(s_vecs);\
+        free(s_vecs);
         return -2;
     }
 

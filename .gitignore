@@ -73,3 +73,6 @@ venv.bak/
 
 # Ruff stuff:
 .ruff_cache/
+
+# Test / run artifacts
+SPOT.XDS
