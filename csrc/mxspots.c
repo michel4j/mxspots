@@ -169,6 +169,14 @@ static int compare_spots_desc(const void *a, const void *b) {
     return 0;
 }
 
+static int compare_float_asc(const void *a, const void *b) {
+    float fa = *(const float *)a;
+    float fb = *(const float *)b;
+    if (fa < fb) return -1;
+    if (fa > fb) return 1;
+    return 0;
+}
+
 MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {
     if (max_nx <= 0 || max_ny <= 0) {
         return NULL;
@@ -296,7 +304,7 @@ int mxspots_find_spots_ctx(
 
     if (wavelength > 0.0f && distance > 0.0f) {
         if (params->d_max > 0.0f) {
-            float s_low = wavelength / (2.0f * params->d_max);
+            float s_low = wavelength / (2.0f * params->d_max);\
             if (s_low > 0.0f && s_low < 1.0f) {
                 float theta_low = asinf(s_low);
                 float r_low = distance * tanf(2.0f * theta_low);
@@ -351,7 +359,7 @@ int mxspots_find_spots_ctx(
             }
 
             float bg, std;
-            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);
+            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);\
 
             float threshold = bg + params->snr_threshold * std;
             if (v > threshold) {
@@ -377,7 +385,7 @@ int mxspots_find_spots_ctx(
 
         while (x < nx) {
             if (mask_row[x] == 1) {
-                int x_start = x;
+                int x_start = x;\
                 while (x < nx && mask_row[x] == 1) {
                     x++;
                 }
@@ -570,24 +578,91 @@ int mxspots_score_spots(
         out_score->avg_snr = 0.0f;
         out_score->d_min = 999.0f;
         out_score->percentage_indexed = 0.0f;
+        out_score->indexed_spot_count = 0;
+        out_score->ice_score = 0.0f;
+        out_score->num_ice_rings = 0;
+        out_score->score = 0.0f;
         return 0;
     }
 
     out_score->spot_count = spot_count;
     double sum_snr = 0.0;
-    float min_d = 999.0f;
+
+    float *d_spacings = (float *)malloc(spot_count * sizeof(float));
+    int valid_d_count = 0;
 
     for (int i = 0; i < spot_count; ++i) {
         sum_snr += spots[i].snr;
-        if (spots[i].d_spacing > 0.0f && spots[i].d_spacing < min_d) {
-            min_d = spots[i].d_spacing;
+        if (spots[i].d_spacing > 0.0f && spots[i].d_spacing < 900.0f) {
+            if (d_spacings != NULL) {
+                d_spacings[valid_d_count++] = spots[i].d_spacing;
+            }
         }
     }
 
     out_score->avg_snr = (float)(sum_snr / spot_count);
-    out_score->d_min = min_d;
-    out_score->percentage_indexed = 0.0f;
 
+    /* Compute 95th percentile resolution limit (where 95% of spots have d >= d_95) */
+    float d_95 = 999.0f;
+    if (valid_d_count > 0 && d_spacings != NULL) {
+        qsort(d_spacings, valid_d_count, sizeof(float), compare_float_asc);
+        /* 5% of highest resolution spots have smallest d-spacings */
+        int k = (int)(0.05f * (float)(valid_d_count - 1));
+        if (k < 0) k = 0;
+        if (k >= valid_d_count) k = valid_d_count - 1;
+        d_95 = d_spacings[k];
+    }
+    if (d_spacings != NULL) {
+        free(d_spacings);
+    }
+
+    out_score->d_min = d_95;
+
+    /* Compute unified composite quality score S in [0, 100] */
+    int n_indexed = out_score->indexed_spot_count;
+    if (n_indexed <= 0 && out_score->percentage_indexed > 0.0f) {
+        n_indexed = (int)roundf((out_score->percentage_indexed / 100.0f) * (float)spot_count);
+    }
+    if (n_indexed <= 0 && out_score->percentage_indexed <= 0.0f) {
+        n_indexed = spot_count;
+    }
+
+    /* 1. Spot count term: 0 - 30 pts */
+    float s_spots = 30.0f * (logf(1.0f + (float)n_indexed) / logf(1.0f + 500.0f));
+    if (s_spots > 30.0f) s_spots = 30.0f;
+    if (s_spots < 0.0f) s_spots = 0.0f;
+
+    /* 2. Percentage indexed term: 0 - 25 pts */
+    float s_index = 25.0f * (out_score->percentage_indexed / 100.0f);
+    if (s_index > 25.0f) s_index = 25.0f;
+    if (s_index < 0.0f) s_index = 0.0f;
+
+    /* 3. Average SNR term: 0 - 25 pts */
+    float s_snr = 25.0f * (out_score->avg_snr / 50.0f);
+    if (s_snr > 25.0f) s_snr = 25.0f;
+    if (s_snr < 0.0f) s_snr = 0.0f;
+
+    /* 4. Resolution limit term: 0 - 20 pts (between 4.0 A and 1.2 A) */
+    float s_res = 0.0f;
+    if (d_95 < 4.0f) {
+        s_res = 20.0f * ((4.0f - d_95) / (4.0f - 1.2f));
+        if (s_res > 20.0f) s_res = 20.0f;
+        if (s_res < 0.0f) s_res = 0.0f;
+    }
+
+    /* 5. Ice contamination penalty: 0 - 30 pts */
+    float p_ice = 10.0f * (float)out_score->num_ice_rings;
+    if (out_score->ice_score > 3.0f) {
+        p_ice += 5.0f * (out_score->ice_score - 3.0f);
+    }
+    if (p_ice > 30.0f) p_ice = 30.0f;
+    if (p_ice < 0.0f) p_ice = 0.0f;
+
+    float total_score = s_spots + s_index + s_snr + s_res - p_ice;
+    if (total_score > 100.0f) total_score = 100.0f;
+    if (total_score < 0.0f) total_score = 0.0f;
+
+    out_score->score = total_score;
     return 0;
 }
 
@@ -602,6 +677,15 @@ int mxspots_score_frame(
         return -1;
     }
 
+    /* 1. Ice ring detection */
+    MxIceResult ice_res;
+    ice_res.num_rings = 0;
+    ice_res.ice_score = 0.0f;
+    mxspots_detect_ice(data, nx, ny, params, &ice_res);
+    out_score->ice_score = ice_res.ice_score;
+    out_score->num_ice_rings = ice_res.num_rings;
+
+    /* 2. Spot finding */
     int max_spots = 50000;
     MxSpot *spots = (MxSpot *)malloc(max_spots * sizeof(MxSpot));
     if (spots == NULL) {
@@ -610,6 +694,18 @@ int mxspots_score_frame(
 
     int spot_count = mxspots_find_spots(data, nx, ny, params, spots, max_spots);
     int actual_count = (spot_count < max_spots) ? spot_count : max_spots;
+
+    /* 3. Reciprocal lattice indexing */
+    out_score->percentage_indexed = 0.0f;
+    out_score->indexed_spot_count = 0;
+    if (actual_count > 0) {
+        MxIndexResult index_res;
+        int idx_ret = mxspots_index_spots(spots, actual_count, params, &index_res);
+        if (idx_ret == 0) {
+            out_score->percentage_indexed = index_res.percentage_indexed;
+            out_score->indexed_spot_count = index_res.indexed_spot_count;
+        }
+    }
 
     int ret = mxspots_score_spots(spots, actual_count, out_score);
     free(spots);

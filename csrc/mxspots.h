@@ -59,8 +59,12 @@ typedef struct {
 typedef struct {
     int spot_count;            /* Number of detected spots */
     float avg_snr;             /* Average signal-to-noise ratio */
-    float d_min;               /* Maximum observable resolution in Angstroms */
+    float d_min;               /* 95th percentile resolution limit in Angstroms */
     float percentage_indexed;  /* Indexable fraction percentage (0.0 if not indexed) */
+    int indexed_spot_count;    /* Number of spots conforming to lattice */
+    float ice_score;           /* Ice contamination score */
+    int num_ice_rings;         /* Number of detected ice rings */
+    float score;               /* Unified composite quality score (0.0 - 100.0) */
 } MxScoreResult;
 
 /**

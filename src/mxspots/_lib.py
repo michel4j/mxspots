@@ -90,6 +90,10 @@ class CMxScoreResult(ctypes.Structure):
         ("avg_snr", ctypes.c_float),
         ("d_min", ctypes.c_float),
         ("percentage_indexed", ctypes.c_float),
+        ("indexed_spot_count", ctypes.c_int),
+        ("ice_score", ctypes.c_float),
+        ("num_ice_rings", ctypes.c_int),
+        ("score", ctypes.c_float),
     ]
 
 
