@@ -8,10 +8,83 @@
 #include <omp.h>
 #endif
 
-#define TILE_SIZE 32
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+#define DEFAULT_BG_HALF_WIDTH 15
+#define DEFAULT_PEAK_HALF_WIDTH 3
+
+typedef struct {
+    double *sum;
+    double *sum_sq;
+    int *count;
+    int nx;
+    int ny;
+    int stride;
+} IntegralImage;
+
+static inline void sat_query_box(
+    const IntegralImage *sat,
+    int x0, int y0, int x1, int y1,
+    double *out_sum, double *out_sum_sq, int *out_count
+) {
+    int stride = sat->stride;
+    int i_br = y1 * stride + x1;
+    int i_tr = y0 * stride + x1;
+    int i_bl = y1 * stride + x0;
+    int i_tl = y0 * stride + x0;
+
+    *out_sum = sat->sum[i_br] - sat->sum[i_tr] - sat->sum[i_bl] + sat->sum[i_tl];
+    *out_sum_sq = sat->sum_sq[i_br] - sat->sum_sq[i_tr] - sat->sum_sq[i_bl] + sat->sum_sq[i_tl];
+    *out_count = sat->count[i_br] - sat->count[i_tr] - sat->count[i_bl] + sat->count[i_tl];
+}
+
+static inline void sat_query_annulus(
+    const IntegralImage *sat,
+    int x, int y,
+    int r_out, int r_in,
+    float *out_mean, float *out_std
+) {
+    int x0_out = (x - r_out > 0) ? (x - r_out) : 0;
+    int y0_out = (y - r_out > 0) ? (y - r_out) : 0;
+    int x1_out = (x + r_out + 1 < sat->nx) ? (x + r_out + 1) : sat->nx;
+    int y1_out = (y + r_out + 1 < sat->ny) ? (y + r_out + 1) : sat->ny;
+
+    int x0_in = (x - r_in > 0) ? (x - r_in) : 0;
+    int y0_in = (y - r_in > 0) ? (y - r_in) : 0;
+    int x1_in = (x + r_in + 1 < sat->nx) ? (x + r_in + 1) : sat->nx;
+    int y1_in = (y + r_in + 1 < sat->ny) ? (y + r_in + 1) : sat->ny;
+
+    double s_out, sq_out;
+    int n_out;
+    sat_query_box(sat, x0_out, y0_out, x1_out, y1_out, &s_out, &sq_out, &n_out);
+
+    double s_in, sq_in;
+    int n_in;
+    sat_query_box(sat, x0_in, y0_in, x1_in, y1_in, &s_in, &sq_in, &n_in);
+
+    double s_ann = s_out - s_in;
+    double sq_ann = sq_out - sq_in;
+    int n_ann = n_out - n_in;
+
+    if (n_ann > 5) {
+        double mean = s_ann / n_ann;
+        double var = (sq_ann / n_ann) - (mean * mean);
+        double std = (var > 0.0) ? sqrt(var) : 1.0;
+        *out_mean = (float)mean;
+        *out_std = (std < 1.0) ? 1.0f : (float)std;
+    } else if (n_out > 0) {
+        double mean = s_out / n_out;
+        double var = (sq_out / n_out) - (mean * mean);
+        double std = (var > 0.0) ? sqrt(var) : 1.0;
+        *out_mean = (float)mean;
+        *out_std = (std < 1.0) ? 1.0f : (float)std;
+    } else {
+        *out_mean = 0.0f;
+        *out_std = 1.0f;
+    }
+}
 
 int mxspots_get_version(void) {
     return 100; /* Version 1.0.0 encoded as 100 */
@@ -47,82 +120,64 @@ int mxspots_find_spots(
         return 0;
     }
 
-    int tx_count = (nx + TILE_SIZE - 1) / TILE_SIZE;
-    int ty_count = (ny + TILE_SIZE - 1) / TILE_SIZE;
-    int total_tiles = tx_count * ty_count;
+    int stride = nx + 1;
+    size_t sat_entries = (size_t)(ny + 1) * stride;
 
-    float *tile_mean = (float *)malloc(total_tiles * sizeof(float));
-    float *tile_std = (float *)malloc(total_tiles * sizeof(float));
-    if (tile_mean == NULL || tile_std == NULL) {
-        free(tile_mean);
-        free(tile_std);
+    double *sat_sum = (double *)calloc(sat_entries, sizeof(double));
+    double *sat_sum_sq = (double *)calloc(sat_entries, sizeof(double));
+    int *sat_count = (int *)calloc(sat_entries, sizeof(int));
+
+    if (sat_sum == NULL || sat_sum_sq == NULL || sat_count == NULL) {
+        free(sat_sum);
+        free(sat_sum_sq);
+        free(sat_count);
         return 0;
     }
 
-    /* Pass 1 & 2: Multithreaded tile background mean and std calculation */
+    IntegralImage sat;
+    sat.sum = sat_sum;
+    sat.sum_sq = sat_sum_sq;
+    sat.count = sat_count;
+    sat.nx = nx;
+    sat.ny = ny;
+    sat.stride = stride;
+
+    /* Pass 1: Compute cumulative row integrals in parallel */
     #pragma omp parallel for schedule(static)
-    for (int ty = 0; ty < ty_count; ++ty) {
-        int y_start = ty * TILE_SIZE;
-        int y_end = (y_start + TILE_SIZE < ny) ? (y_start + TILE_SIZE) : ny;
+    for (int y = 0; y < ny; ++y) {
+        double r_sum = 0.0;
+        double r_sum_sq = 0.0;
+        int r_count = 0;
+        int row_offset = (y + 1) * stride;
+        const float *row = &data[y * nx];
 
-        for (int tx = 0; tx < tx_count; ++tx) {
-            int x_start = tx * TILE_SIZE;
-            int x_end = (x_start + TILE_SIZE < nx) ? (x_start + TILE_SIZE) : nx;
-            int t_idx = ty * tx_count + tx;
-
-            double sum = 0.0;
-            double sum_sq = 0.0;
-            int count = 0;
-
-            for (int y = y_start; y < y_end; ++y) {
-                const float *row = &data[y * nx];
-                for (int x = x_start; x < x_end; ++x) {
-                    float v = row[x];
-                    if (v >= 0.0f && !isnan(v) && !isinf(v)) {
-                        sum += v;
-                        sum_sq += (double)v * v;
-                        count++;
-                    }
-                }
+        for (int x = 0; x < nx; ++x) {
+            float v = row[x];
+            if (v >= 0.0f && !isnan(v) && !isinf(v)) {
+                r_sum += (double)v;
+                r_sum_sq += (double)v * v;
+                r_count += 1;
             }
+            sat_sum[row_offset + (x + 1)] = r_sum;
+            sat_sum_sq[row_offset + (x + 1)] = r_sum_sq;
+            sat_count[row_offset + (x + 1)] = r_count;
+        }
+    }
 
-            if (count > 0) {
-                double mean1 = sum / count;
-                double var1 = (sum_sq / count) - (mean1 * mean1);
-                double std1 = (var1 > 0.0) ? sqrt(var1) : 0.0;
-
-                /* Pass 2: Outlier rejection for robust background */
-                double sum2 = 0.0;
-                double sum_sq2 = 0.0;
-                int count2 = 0;
-                double cutoff = mean1 + 3.0 * std1;
-
-                for (int y = y_start; y < y_end; ++y) {
-                    const float *row = &data[y * nx];
-                    for (int x = x_start; x < x_end; ++x) {
-                        float v = row[x];
-                        if (v >= 0.0f && v <= cutoff && !isnan(v) && !isinf(v)) {
-                            sum2 += v;
-                            sum_sq2 += (double)v * v;
-                            count2++;
-                        }
-                    }
-                }
-
-                if (count2 > 0) {
-                    double mean2 = sum2 / count2;
-                    double var2 = (sum_sq2 / count2) - (mean2 * mean2);
-                    double std2 = (var2 > 0.0) ? sqrt(var2) : 1.0;
-                    tile_mean[t_idx] = (float)mean2;
-                    tile_std[t_idx] = (std2 < 1.0) ? 1.0f : (float)std2;
-                } else {
-                    tile_mean[t_idx] = (float)mean1;
-                    tile_std[t_idx] = (std1 < 1.0) ? 1.0f : (float)std1;
-                }
-            } else {
-                tile_mean[t_idx] = 0.0f;
-                tile_std[t_idx] = 1.0f;
-            }
+    /* Pass 2: Compute cumulative column integrals in parallel */
+    #pragma omp parallel for schedule(static)
+    for (int x = 1; x <= nx; ++x) {
+        double c_sum = 0.0;
+        double c_sum_sq = 0.0;
+        int c_count = 0;
+        for (int y = 1; y <= ny; ++y) {
+            int idx = y * stride + x;
+            c_sum += sat_sum[idx];
+            c_sum_sq += sat_sum_sq[idx];
+            c_count += sat_count[idx];
+            sat_sum[idx] = c_sum;
+            sat_sum_sq[idx] = c_sum_sq;
+            sat_count[idx] = c_count;
         }
     }
 
@@ -151,18 +206,18 @@ int mxspots_find_spots(
         }
     }
 
-    /* Candidate pixel mask - parallelized across rows */
+    /* Candidate pixel mask - parallelized across rows using O(1) Integral Image Annulus */
     int total_pixels = nx * ny;
     uint8_t *mask = (uint8_t *)calloc(total_pixels, sizeof(uint8_t));
     if (mask == NULL) {
-        free(tile_mean);
-        free(tile_std);
+        free(sat_sum);
+        free(sat_sum_sq);
+        free(sat_count);
         return 0;
     }
 
     #pragma omp parallel for schedule(static)
     for (int y = 0; y < ny; ++y) {
-        int ty = y / TILE_SIZE;
         const float *row = &data[y * nx];
         uint8_t *mask_row = &mask[y * nx];
         float ry = (y - params->beam_y) * params->pixel_size_y;
@@ -176,14 +231,16 @@ int mxspots_find_spots(
                 continue;
             }
 
-            int tx = x / TILE_SIZE;
-            int t_idx = ty * tx_count + tx;
             float v = row[x];
-            float bg = tile_mean[t_idx];
-            float std = tile_std[t_idx];
-            float threshold = bg + params->snr_threshold * std;
+            if (v <= 0.0f) {
+                continue;
+            }
 
-            if (v > threshold && v > 0.0f) {
+            float bg, std;
+            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);
+
+            float threshold = bg + params->snr_threshold * std;
+            if (v > threshold) {
                 mask_row[x] = 1;
             }
         }
@@ -196,8 +253,9 @@ int mxspots_find_spots(
     MxSpot *spots = (MxSpot *)malloc(spot_capacity * sizeof(MxSpot));
 
     if (queue == NULL || spots == NULL) {
-        free(tile_mean);
-        free(tile_std);
+        free(sat_sum);
+        free(sat_sum_sq);
+        free(sat_count);
         free(mask);
         free(queue);
         free(spots);
@@ -231,9 +289,8 @@ int mxspots_find_spots(
                 int cx = curr % nx;
                 float c_val = data[curr];
 
-                int c_tile = (cy / TILE_SIZE) * tx_count + (cx / TILE_SIZE);
-                float c_bg = tile_mean[c_tile];
-                float c_std = tile_std[c_tile];
+                float c_bg, c_std;
+                sat_query_annulus(&sat, cx, cy, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &c_bg, &c_std);
                 float net_I = (c_val > c_bg) ? (c_val - c_bg) : 0.001f;
 
                 area++;
@@ -316,8 +373,9 @@ int mxspots_find_spots(
         memcpy(out_spots, spots, copy_count * sizeof(MxSpot));
     }
 
-    free(tile_mean);
-    free(tile_std);
+    free(sat_sum);
+    free(sat_sum_sq);
+    free(sat_count);
     free(mask);
     free(queue);
     free(spots);
