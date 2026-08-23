@@ -29,8 +29,16 @@ The automatic detection and exclusion of pixels or candidate spots falling withi
 _Avoid_: Ring stripping, peak cutting
 
 **Resolution Limit**:
-The highest resolution (smallest $d$-spacing in Angstroms) at which statistically significant diffraction spots are identified on a frame.
+The highest resolution (smallest $d$-spacing in Angstroms, evaluated at the 95th percentile $d_{95}$) at which statistically significant diffraction spots are identified on a frame.
 _Avoid_: Max resolution, high-resolution cutoff
+
+**Bragg Regularity**:
+The percentage of detected spots on a frame that belong to periodic reciprocal lattice recurrence graphs.
+_Avoid_: Spot periodicity, lattice score, regularity rate
+
+**Multi-Lattice / Split Crystal**:
+The presence of multiple independent crystal lattices detected on a single diffraction frame, identified by distinct connected components in the difference vector recurrence graph.
+_Avoid_: Overlapping frames, double lattice, multiple crystals
 
 **Indexing**:
 The assignment of 3D reciprocal lattice vectors to observed spots using the Spot Engine's FFT routine to determine unit cell parameters.
@@ -39,6 +47,10 @@ _Avoid_: Auto-indexing, lattice mapping
 **Percentage Indexed**:
 The percentage of detected spots on a frame that are successfully fitted to the indexing lattice model.
 _Avoid_: Indexing rate, indexed spot fraction
+
+**Composite Quality Score**:
+A normalized 0–100 quality metric computed by the Spot Engine integrating spot count, Bragg regularity / percentage indexed, average SNR, and 95th percentile resolution limit ($d_{95}$) with penalties for ice contamination and multi-lattice split crystals.
+_Avoid_: Frame score, quality index, total score
 
 **XDS Spot File**:
 A reference file (e.g. `SPOT.XDS`) containing spot coordinates $(x, y, z)$ and intensities used by test fixtures to synthesize test frames.
@@ -54,7 +66,7 @@ _Avoid_: Fake frame, mock image
 Command and Python interface for detecting spots on diffraction frames and outputting spot coordinates and intensities.
 
 **mxspots.score**:
-Command and Python interface for computing frame quality metrics including spot count, SNR, resolution limit, and ice contamination scores.
+Command and Python interface for computing frame quality metrics including spot count, SNR, resolution limit, ice contamination scores, Bragg regularity, and composite quality score.
 
 **mxspots.index**:
 Command and Python interface for running lattice indexing on detected spots and calculating percentage indexed.
