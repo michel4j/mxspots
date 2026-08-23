@@ -91,8 +91,10 @@ class ScoreResult:
     avg_snr: float
     d_min: float
     percentage_indexed: Optional[float] = None
+    indexed_spot_count: Optional[int] = None
     ice_score: Optional[float] = None
     ice_rings_detected: Optional[List[float]] = None
+    score: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)

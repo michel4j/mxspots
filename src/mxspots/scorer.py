@@ -11,6 +11,11 @@ from .spotfinder import extract_frame_and_params, detect_ice_rings_data
 
 def score_spots(
     spots: Union[SpotList, List[Spot]],
+    params: Optional[SpotParams] = None,
+    percentage_indexed: Optional[float] = None,
+    indexed_spot_count: Optional[int] = None,
+    ice_score: Optional[float] = None,
+    num_ice_rings: Optional[int] = None,
 ) -> ScoreResult:
     """
     Compute quality metrics from a list of detected spots.
@@ -24,7 +29,21 @@ def score_spots(
             avg_snr=0.0,
             d_min=999.0,
             percentage_indexed=None,
+            indexed_spot_count=None,
+            ice_score=ice_score,
+            ice_rings_detected=None,
+            score=0.0,
         )
+
+    # If indexing information not provided but params given, run index_spots
+    if percentage_indexed is None and params is not None and spot_count > 0:
+        from .indexer import index_spots
+        try:
+            idx_res = index_spots(spot_objs, params=params)
+            percentage_indexed = idx_res.percentage_indexed
+            indexed_spot_count = idx_res.indexed_spot_count
+        except Exception:
+            pass
 
     lib = get_lib()
     c_spots = (CMxSpot * spot_count)()
@@ -36,6 +55,15 @@ def score_spots(
         c_spots[i].snr = ctypes.c_float(s.snr)
 
     out_score = CMxScoreResult()
+    if percentage_indexed is not None:
+        out_score.percentage_indexed = ctypes.c_float(percentage_indexed)
+    if indexed_spot_count is not None:
+        out_score.indexed_spot_count = ctypes.c_int(indexed_spot_count)
+    if ice_score is not None:
+        out_score.ice_score = ctypes.c_float(ice_score)
+    if num_ice_rings is not None:
+        out_score.num_ice_rings = ctypes.c_int(num_ice_rings)
+
     ret = lib.mxspots_score_spots(
         c_spots,
         spot_count,
@@ -50,6 +78,10 @@ def score_spots(
         avg_snr=float(out_score.avg_snr),
         d_min=float(out_score.d_min),
         percentage_indexed=float(out_score.percentage_indexed) if out_score.percentage_indexed > 0.0 else None,
+        indexed_spot_count=int(out_score.indexed_spot_count) if out_score.indexed_spot_count > 0 else None,
+        ice_score=ice_score,
+        ice_rings_detected=None,
+        score=float(out_score.score),
     )
 
 
@@ -77,7 +109,7 @@ def score_data(
     if params.ice_mask:
         detected_rings, score_val = detect_ice_rings_data(data, params=params)
         ice_score = score_val
-        ice_rings_detected = [r.d_spacing for r in detected_rings]
+        ice_rings_detected = [r.d_spacing for r in detected_rings] if detected_rings else None
         if detected_rings:
             active_masked = list(params.masked_rings) if params.masked_rings is not None else []
             for ring in detected_rings:
@@ -122,8 +154,10 @@ def score_data(
         avg_snr=float(out_score.avg_snr),
         d_min=float(out_score.d_min),
         percentage_indexed=float(out_score.percentage_indexed) if out_score.percentage_indexed > 0.0 else None,
-        ice_score=ice_score,
+        indexed_spot_count=int(out_score.indexed_spot_count) if out_score.indexed_spot_count > 0 else None,
+        ice_score=ice_score if ice_score is not None else (float(out_score.ice_score) if out_score.ice_score > 0.0 else None),
         ice_rings_detected=ice_rings_detected,
+        score=float(out_score.score),
     )
 
 
