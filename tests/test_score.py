@@ -61,6 +61,18 @@ def test_score_spots_auto_indexing():
     assert result.score > 0.0
 
 
+def test_score_ice_frame_metrics(test_data_dir):
+    from mxspots.scorer import score
+
+    yaml_path = test_data_dir / "ice.yaml"
+    result = score(yaml_path)
+
+    assert isinstance(result, ScoreResult)
+    assert result.ice_score is not None
+    assert result.ice_rings_detected is not None
+    assert len(result.ice_rings_detected) > 0
+
+
 def test_score_cli_json(test_data_dir, capsys, monkeypatch):
     from mxspots.cli import score_main
     import json
@@ -88,6 +100,9 @@ def test_score_cli_text(test_data_dir, capsys, monkeypatch):
     score_main()
     captured = capsys.readouterr()
 
+    assert "Quality Score for" in captured.out
+    assert "Score:" in captured.out
     assert "Spot Count" in captured.out
     assert "Average SNR" in captured.out
     assert "Resolution Limit" in captured.out
+    assert "95th percentile" in captured.out

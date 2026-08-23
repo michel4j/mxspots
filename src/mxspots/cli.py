@@ -123,16 +123,19 @@ def score_main():
         print(score_res.to_json(indent=2))
     else:
         print(f"Quality Score for {args.image}:")
+        print(f"  Score:              {score_res.score:.1f} / 100")
         print(f"  Spot Count:         {score_res.spot_count}")
+        if score_res.indexed_spot_count is not None:
+            print(f"  Indexed Spots:      {score_res.indexed_spot_count}")
+        if score_res.percentage_indexed is not None:
+            print(f"  Percentage Indexed: {score_res.percentage_indexed:.1f}%")
         print(f"  Average SNR:        {score_res.avg_snr:.2f}")
-        d_min_str = f"{score_res.d_min:.2f} Å" if score_res.d_min < 900.0 else "N/A"
+        d_min_str = f"{score_res.d_min:.2f} Å (95th percentile)" if score_res.d_min < 900.0 else "N/A"
         print(f"  Resolution Limit:   {d_min_str}")
         if score_res.ice_score is not None:
             print(f"  Ice Score:          {score_res.ice_score:.2f}")
         if score_res.ice_rings_detected is not None:
             print(f"  Ice Rings Detected: {len(score_res.ice_rings_detected)}")
-        if score_res.percentage_indexed is not None:
-            print(f"  Percentage Indexed: {score_res.percentage_indexed:.1f}%")
 
 
 def index_main():
