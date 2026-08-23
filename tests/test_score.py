@@ -84,6 +84,23 @@ def test_score_ice_frame_metrics(test_data_dir):
     assert len(result.ice_rings_detected) > 0
 
 
+def test_score_lyso_split_multi_lattice(test_data_dir):
+    from mxspots.scorer import score
+
+    yaml_path = test_data_dir / "lyso-split.yaml"
+    result = score(yaml_path)
+
+    assert isinstance(result, ScoreResult)
+    assert result.spot_count > 100
+    assert result.percentage_regular is not None
+    assert result.percentage_regular > 60.0
+    assert result.regular_spot_count is not None
+    assert result.regular_spot_count > 100
+    # Multi-lattice frame should detect more than 1 lattice cluster
+    assert result.num_lattices is not None
+    assert result.num_lattices > 1
+
+
 def test_score_cli_json(test_data_dir, capsys, monkeypatch):
     from mxspots.cli import score_main
     import json
@@ -99,6 +116,9 @@ def test_score_cli_json(test_data_dir, capsys, monkeypatch):
     assert "avg_snr" in data
     assert "d_min" in data
     assert "score" in data
+    assert "percentage_regular" in data
+    assert "regular_spot_count" in data
+    assert "num_lattices" in data
     assert data["spot_count"] > 0
 
 
@@ -117,3 +137,18 @@ def test_score_cli_text(test_data_dir, capsys, monkeypatch):
     assert "Average SNR" in captured.out
     assert "Resolution Limit" in captured.out
     assert "95th percentile" in captured.out
+    assert "Bragg Regularity:" in captured.out
+
+
+def test_score_cli_split_warning(test_data_dir, capsys, monkeypatch):
+    from mxspots.cli import score_main
+
+    yaml_file = str(test_data_dir / "lyso-split.yaml")
+    monkeypatch.setattr("sys.argv", ["mxspots.score", yaml_file])
+
+    score_main()
+    captured = capsys.readouterr()
+
+    assert "Quality Score for" in captured.out
+    assert "Bragg Regularity:" in captured.out
+    assert "Warning: Multi-lattice / split crystal detected" in captured.out

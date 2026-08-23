@@ -125,6 +125,12 @@ def score_main():
         print(f"Quality Score for {args.image}:")
         print(f"  Score:              {score_res.score:.1f} / 100")
         print(f"  Spot Count:         {score_res.spot_count}")
+        if score_res.percentage_regular is not None:
+            reg_cnt_str = f" ({score_res.regular_spot_count} spots)" if score_res.regular_spot_count is not None else ""
+            print(f"  Bragg Regularity:   {score_res.percentage_regular:.1f}%{reg_cnt_str}")
+        if score_res.num_lattices is not None and score_res.num_lattices > 0:
+            lattice_note = " (Warning: Multi-lattice / split crystal detected)" if score_res.num_lattices > 1 else ""
+            print(f"  Lattices Detected:  {score_res.num_lattices}{lattice_note}")
         if score_res.indexed_spot_count is not None:
             print(f"  Indexed Spots:      {score_res.indexed_spot_count}")
         if score_res.percentage_indexed is not None:
