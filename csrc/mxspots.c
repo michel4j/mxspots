@@ -14,8 +14,26 @@
 
 #define DEFAULT_BG_HALF_WIDTH 15
 #define DEFAULT_PEAK_HALF_WIDTH 3
-#define BFS_QUEUE_CAPACITY 2048
 #define DEFAULT_SPOTS_CAPACITY 50000
+#define DEFAULT_CCL_CAPACITY 65536
+#define MAX_RUNS_PER_ROW 4096
+
+typedef struct {
+    int parent;
+    int area;
+    double sum_I;
+    double sum_net_I;
+    double sum_x;
+    double sum_y;
+    float max_I;
+    float max_snr;
+} CclComponent;
+
+typedef struct {
+    int x_start;
+    int x_end;
+    int label;
+} Run;
 
 struct MxSpotsContext {
     int max_nx;
@@ -26,6 +44,8 @@ struct MxSpotsContext {
     int8_t *mask;
     MxSpot *spots_buf;
     int spots_capacity;
+    CclComponent *ccl_nodes;
+    int ccl_capacity;
 };
 
 typedef struct {
@@ -99,6 +119,34 @@ static inline void sat_query_annulus(
     }
 }
 
+static inline int ccl_find_root(CclComponent *nodes, int label) {
+    int root = label;
+    while (nodes[root].parent != root) {
+        root = nodes[root].parent;
+    }
+    int curr = label;
+    while (curr != root) {
+        int next = nodes[curr].parent;
+        nodes[curr].parent = root;
+        curr = next;
+    }
+    return root;
+}
+
+static inline void ccl_union(CclComponent *nodes, int root1, int root2) {
+    if (root1 == root2) return;
+    nodes[root2].parent = root1;
+    nodes[root1].area += nodes[root2].area;
+    nodes[root1].sum_I += nodes[root2].sum_I;
+    nodes[root1].sum_net_I += nodes[root2].sum_net_I;
+    nodes[root1].sum_x += nodes[root2].sum_x;
+    nodes[root1].sum_y += nodes[root2].sum_y;
+    if (nodes[root2].max_I > nodes[root1].max_I) {
+        nodes[root1].max_I = nodes[root2].max_I;
+        nodes[root1].max_snr = nodes[root2].max_snr;
+    }
+}
+
 int mxspots_get_version(void) {
     return 100; /* Version 1.0.0 encoded as 100 */
 }
@@ -134,6 +182,7 @@ MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {
     ctx->max_nx = max_nx;
     ctx->max_ny = max_ny;
     ctx->spots_capacity = DEFAULT_SPOTS_CAPACITY;
+    ctx->ccl_capacity = DEFAULT_CCL_CAPACITY;
 
     int stride = max_nx + 1;
     size_t sat_entries = (size_t)(max_ny + 1) * stride;
@@ -144,9 +193,10 @@ MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {
     ctx->sat_count = (int *)calloc(sat_entries, sizeof(int));
     ctx->mask = (int8_t *)calloc(total_pixels, sizeof(int8_t));
     ctx->spots_buf = (MxSpot *)malloc(ctx->spots_capacity * sizeof(MxSpot));
+    ctx->ccl_nodes = (CclComponent *)malloc(ctx->ccl_capacity * sizeof(CclComponent));
 
     if (ctx->sat_sum == NULL || ctx->sat_sum_sq == NULL || ctx->sat_count == NULL ||
-        ctx->mask == NULL || ctx->spots_buf == NULL) {
+        ctx->mask == NULL || ctx->spots_buf == NULL || ctx->ccl_nodes == NULL) {
         mxspots_free_context(ctx);
         return NULL;
     }
@@ -163,6 +213,7 @@ void mxspots_free_context(MxSpotsContext *ctx) {
     free(ctx->sat_count);
     free(ctx->mask);
     free(ctx->spots_buf);
+    free(ctx->ccl_nodes);
     free(ctx);
 }
 
@@ -291,88 +342,124 @@ int mxspots_find_spots_ctx(
         }
     }
 
-    /* Connected component analysis using bounded stack ring buffer */
+    /* Streaming Two-Pass Run-Length Connected Component Labeling */
+    CclComponent *nodes = ctx->ccl_nodes;
+    int num_nodes = 0;
+    int max_nodes = ctx->ccl_capacity;
+
+    Run prev_runs[MAX_RUNS_PER_ROW];
+    Run curr_runs[MAX_RUNS_PER_ROW];
+    int num_prev_runs = 0;
+
+    for (int y = 0; y < ny; ++y) {
+        const float *row = &data[y * nx];
+        const int8_t *mask_row = &mask[y * nx];
+        int num_curr_runs = 0;
+        int x = 0;
+
+        while (x < nx) {
+            if (mask_row[x] == 1) {
+                int x_start = x;
+                while (x < nx && mask_row[x] == 1) {
+                    x++;
+                }
+                int x_end = x - 1;
+
+                if (num_curr_runs < MAX_RUNS_PER_ROW && num_nodes < max_nodes) {
+                    int run_area = 0;
+                    double run_sum_I = 0.0;
+                    double run_sum_net_I = 0.0;
+                    double run_sum_x = 0.0;
+                    double run_sum_y = 0.0;
+                    float run_max_I = -1e9f;
+                    float run_max_snr = 0.0f;
+
+                    for (int rx = x_start; rx <= x_end; ++rx) {
+                        float v = row[rx];
+                        float bg, std;
+                        sat_query_annulus(&sat, rx, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);
+                        float net_I = (v > bg) ? (v - bg) : 0.001f;
+                        float snr = (v - bg) / std;
+
+                        run_area++;
+                        run_sum_I += (double)v;
+                        run_sum_net_I += (double)net_I;
+                        run_sum_x += (double)rx * net_I;
+                        run_sum_y += (double)y * net_I;
+
+                        if (v > run_max_I) {
+                            run_max_I = v;
+                            run_max_snr = snr;
+                        }
+                    }
+
+                    int matched_root = -1;
+                    for (int p = 0; p < num_prev_runs; ++p) {
+                        /* 8-connectivity with previous row: x_start <= prev.x_end + 1 && x_end >= prev.x_start - 1 */
+                        if (x_start <= prev_runs[p].x_end + 1 && x_end >= prev_runs[p].x_start - 1) {
+                            int prev_root = ccl_find_root(nodes, prev_runs[p].label);
+                            if (matched_root == -1) {
+                                matched_root = prev_root;
+                            } else if (matched_root != prev_root) {
+                                ccl_union(nodes, matched_root, prev_root);
+                            }
+                        }
+                    }
+
+                    int label;
+                    if (matched_root == -1) {
+                        label = num_nodes++;
+                        nodes[label].parent = label;
+                        nodes[label].area = run_area;
+                        nodes[label].sum_I = run_sum_I;
+                        nodes[label].sum_net_I = run_sum_net_I;
+                        nodes[label].sum_x = run_sum_x;
+                        nodes[label].sum_y = run_sum_y;
+                        nodes[label].max_I = run_max_I;
+                        nodes[label].max_snr = run_max_snr;
+                    } else {
+                        label = matched_root;
+                        nodes[label].area += run_area;
+                        nodes[label].sum_I += run_sum_I;
+                        nodes[label].sum_net_I += run_sum_net_I;
+                        nodes[label].sum_x += run_sum_x;
+                        nodes[label].sum_y += run_sum_y;
+                        if (run_max_I > nodes[label].max_I) {
+                            nodes[label].max_I = run_max_I;
+                            nodes[label].max_snr = run_max_snr;
+                        }
+                    }
+
+                    curr_runs[num_curr_runs].x_start = x_start;
+                    curr_runs[num_curr_runs].x_end = x_end;
+                    curr_runs[num_curr_runs].label = label;
+                    num_curr_runs++;
+                }
+            } else {
+                x++;
+            }
+        }
+
+        if (num_curr_runs > 0) {
+            memcpy(prev_runs, curr_runs, num_curr_runs * sizeof(Run));
+            num_prev_runs = num_curr_runs;
+        } else {
+            num_prev_runs = 0;
+        }
+    }
+
+    /* Second Pass: Filter and extract valid root components */
     int spot_count = 0;
     MxSpot *spots = ctx->spots_buf;
     int spot_capacity = ctx->spots_capacity;
 
-    int ring_queue[BFS_QUEUE_CAPACITY];
-
-    for (int y = 0; y < ny; ++y) {
-        for (int x = 0; x < nx; ++x) {
-            int idx = y * nx + x;
-            if (mask[idx] != 1) {
-                continue;
-            }
-
-            /* Start BFS connected component */
-            int head = 0;
-            int tail = 0;
-            int q_count = 0;
-
-            ring_queue[tail] = idx;
-            tail = (tail + 1) % BFS_QUEUE_CAPACITY;
-            q_count++;
-            mask[idx] = -1; /* Mark visited */
-
-            int area = 0;
-            double sum_I = 0.0;
-            double sum_net_I = 0.0;
-            double sum_x = 0.0;
-            double sum_y = 0.0;
-            float max_I = -1e9f;
-            float max_snr = 0.0f;
-
-            while (q_count > 0) {
-                int curr = ring_queue[head];
-                head = (head + 1) % BFS_QUEUE_CAPACITY;
-                q_count--;
-
-                int cy = curr / nx;
-                int cx = curr % nx;
-                float c_val = data[curr];
-
-                float c_bg, c_std;
-                sat_query_annulus(&sat, cx, cy, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &c_bg, &c_std);
-                float net_I = (c_val > c_bg) ? (c_val - c_bg) : 0.001f;
-
-                area++;
-                sum_I += (double)c_val;
-                sum_net_I += (double)net_I;
-                sum_x += (double)cx * net_I;
-                sum_y += (double)cy * net_I;
-
-                if (c_val > max_I) {
-                    max_I = c_val;
-                    max_snr = (c_val - c_bg) / c_std;
-                }
-
-                /* 8-connected neighbors */
-                for (int dy = -1; dy <= 1; ++dy) {
-                    int ny_coord = cy + dy;
-                    if (ny_coord < 0 || ny_coord >= ny) continue;
-
-                    for (int dx = -1; dx <= 1; ++dx) {
-                        if (dx == 0 && dy == 0) continue;
-                        int nx_coord = cx + dx;
-                        if (nx_coord < 0 || nx_coord >= nx) continue;
-
-                        int n_idx = ny_coord * nx + nx_coord;
-                        if (mask[n_idx] == 1) {
-                            mask[n_idx] = -1; /* Mark visited */
-                            if (q_count < BFS_QUEUE_CAPACITY && area < params->max_spot_area + 20) {
-                                ring_queue[tail] = n_idx;
-                                tail = (tail + 1) % BFS_QUEUE_CAPACITY;
-                                q_count++;
-                            }
-                        }
-                    }
-                }
-            }
-
+    for (int i = 0; i < num_nodes; ++i) {
+        if (nodes[i].parent == i) { /* Root node */
+            int area = nodes[i].area;
             if (area >= params->min_spot_area && area <= params->max_spot_area) {
-                float cx = (sum_net_I > 0.0) ? (float)(sum_x / sum_net_I) : (float)x;
-                float cy = (sum_net_I > 0.0) ? (float)(sum_y / sum_net_I) : (float)y;
+                double net_I = nodes[i].sum_net_I;
+                float cx = (net_I > 0.0) ? (float)(nodes[i].sum_x / net_I) : 0.0f;
+                float cy = (net_I > 0.0) ? (float)(nodes[i].sum_y / net_I) : 0.0f;
 
                 float rx = (cx - params->beam_x) * params->pixel_size_x;
                 float ry = (cy - params->beam_y) * params->pixel_size_y;
@@ -394,8 +481,8 @@ int mxspots_find_spots_ctx(
                     spots[spot_count].x = cx;
                     spots[spot_count].y = cy;
                     spots[spot_count].d_spacing = d;
-                    spots[spot_count].intensity = (float)sum_I;
-                    spots[spot_count].snr = max_snr;
+                    spots[spot_count].intensity = (float)nodes[i].sum_I;
+                    spots[spot_count].snr = nodes[i].max_snr;
                     spot_count++;
                 }
             }
