@@ -9,10 +9,43 @@ from .synthetic import SyntheticFrame, generate_synthetic_frame
 import mxio
 
 
+class SpotFinderContext:
+    """
+    Reusable execution scratch context for zero-allocation spot finding loops.
+    """
+
+    def __init__(self, max_nx: int = 3100, max_ny: int = 3100):
+        self.max_nx = max_nx
+        self.max_ny = max_ny
+        self._lib = get_lib()
+        self._handle = self._lib.mxspots_create_context(max_nx, max_ny)
+        if not self._handle:
+            raise MemoryError(f"Failed to allocate SpotFinderContext for {max_nx}x{max_ny}")
+
+    @property
+    def handle(self):
+        return self._handle
+
+    def close(self):
+        if self._handle is not None:
+            self._lib.mxspots_free_context(self._handle)
+            self._handle = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __del__(self):
+        self.close()
+
+
 def findspots_data(
     data: np.ndarray,
     params: Optional[SpotParams] = None,
     max_spots: int = 50000,
+    context: Optional[SpotFinderContext] = None,
 ) -> SpotList:
     """
     Find spots in a 2D NumPy float32 image array.
@@ -36,14 +69,26 @@ def findspots_data(
     data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
 
     out_buffer = (CMxSpot * max_spots)()
-    num_found = lib.mxspots_find_spots(
-        data_ptr,
-        nx,
-        ny,
-        ctypes.byref(c_params),
-        out_buffer,
-        max_spots,
-    )
+
+    if context is not None and context.handle is not None and nx <= context.max_nx and ny <= context.max_ny:
+        num_found = lib.mxspots_find_spots_ctx(
+            context.handle,
+            data_ptr,
+            nx,
+            ny,
+            ctypes.byref(c_params),
+            out_buffer,
+            max_spots,
+        )
+    else:
+        num_found = lib.mxspots_find_spots(
+            data_ptr,
+            nx,
+            ny,
+            ctypes.byref(c_params),
+            out_buffer,
+            max_spots,
+        )
 
     actual_count = min(num_found, max_spots)
     spots = [
@@ -67,6 +112,7 @@ def findspots(
     xds_output: Optional[Union[str, Path]] = None,
     index: Optional[int] = None,
     z: Optional[float] = None,
+    context: Optional[SpotFinderContext] = None,
 ) -> SpotList:
     """
     Load an image frame and perform spot finding.
@@ -78,6 +124,7 @@ def findspots(
     :param xds_output: Optional path to export detected spots to SPOT.XDS format.
     :param index: Frame index (1-based), sets Z coordinate to index - 0.5 in SPOT.XDS.
     :param z: Explicit Z continuous frame coordinate in SPOT.XDS (overrides index).
+    :param context: Optional pre-allocated SpotFinderContext for zero-allocation execution.
     """
     detected_index = 1
 
@@ -107,7 +154,7 @@ def findspots(
                 wavelength=image_source.wavelength,
             )
         detected_index = 1
-        spot_list = findspots_data(image_source.data, params, max_spots=max_spots)
+        spot_list = findspots_data(image_source.data, params, max_spots=max_spots, context=context)
 
     # mxio.ImageFrame directly
     elif isinstance(image_source, mxio.ImageFrame):
@@ -121,7 +168,7 @@ def findspots(
                 wavelength=image_source.wavelength,
             )
         detected_index = (image_source.start_angle / image_source.delta_angle) + 1.0
-        spot_list = findspots_data(image_source.data, params, max_spots=max_spots)
+        spot_list = findspots_data(image_source.data, params, max_spots=max_spots, context=context)
 
     else:
         raise TypeError(f"Unsupported image source type: {type(image_source)}")

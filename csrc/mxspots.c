@@ -14,6 +14,19 @@
 
 #define DEFAULT_BG_HALF_WIDTH 15
 #define DEFAULT_PEAK_HALF_WIDTH 3
+#define BFS_QUEUE_CAPACITY 2048
+#define DEFAULT_SPOTS_CAPACITY 50000
+
+struct MxSpotsContext {
+    int max_nx;
+    int max_ny;
+    double *sat_sum;
+    double *sat_sum_sq;
+    int *sat_count;
+    int8_t *mask;
+    MxSpot *spots_buf;
+    int spots_capacity;
+};
 
 typedef struct {
     double *sum;
@@ -108,7 +121,53 @@ static int compare_spots_desc(const void *a, const void *b) {
     return 0;
 }
 
-int mxspots_find_spots(
+MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {
+    if (max_nx <= 0 || max_ny <= 0) {
+        return NULL;
+    }
+
+    MxSpotsContext *ctx = (MxSpotsContext *)calloc(1, sizeof(MxSpotsContext));
+    if (ctx == NULL) {
+        return NULL;
+    }
+
+    ctx->max_nx = max_nx;
+    ctx->max_ny = max_ny;
+    ctx->spots_capacity = DEFAULT_SPOTS_CAPACITY;
+
+    int stride = max_nx + 1;
+    size_t sat_entries = (size_t)(max_ny + 1) * stride;
+    size_t total_pixels = (size_t)max_nx * max_ny;
+
+    ctx->sat_sum = (double *)calloc(sat_entries, sizeof(double));
+    ctx->sat_sum_sq = (double *)calloc(sat_entries, sizeof(double));
+    ctx->sat_count = (int *)calloc(sat_entries, sizeof(int));
+    ctx->mask = (int8_t *)calloc(total_pixels, sizeof(int8_t));
+    ctx->spots_buf = (MxSpot *)malloc(ctx->spots_capacity * sizeof(MxSpot));
+
+    if (ctx->sat_sum == NULL || ctx->sat_sum_sq == NULL || ctx->sat_count == NULL ||
+        ctx->mask == NULL || ctx->spots_buf == NULL) {
+        mxspots_free_context(ctx);
+        return NULL;
+    }
+
+    return ctx;
+}
+
+void mxspots_free_context(MxSpotsContext *ctx) {
+    if (ctx == NULL) {
+        return;
+    }
+    free(ctx->sat_sum);
+    free(ctx->sat_sum_sq);
+    free(ctx->sat_count);
+    free(ctx->mask);
+    free(ctx->spots_buf);
+    free(ctx);
+}
+
+int mxspots_find_spots_ctx(
+    MxSpotsContext *ctx,
     const float *data,
     int nx,
     int ny,
@@ -116,28 +175,19 @@ int mxspots_find_spots(
     MxSpot *out_spots,
     int max_spots
 ) {
-    if (data == NULL || nx <= 0 || ny <= 0 || params == NULL) {
+    if (ctx == NULL || data == NULL || nx <= 0 || ny <= 0 || params == NULL) {
+        return 0;
+    }
+
+    if (nx > ctx->max_nx || ny > ctx->max_ny) {
         return 0;
     }
 
     int stride = nx + 1;
-    size_t sat_entries = (size_t)(ny + 1) * stride;
-
-    double *sat_sum = (double *)calloc(sat_entries, sizeof(double));
-    double *sat_sum_sq = (double *)calloc(sat_entries, sizeof(double));
-    int *sat_count = (int *)calloc(sat_entries, sizeof(int));
-
-    if (sat_sum == NULL || sat_sum_sq == NULL || sat_count == NULL) {
-        free(sat_sum);
-        free(sat_sum_sq);
-        free(sat_count);
-        return 0;
-    }
-
     IntegralImage sat;
-    sat.sum = sat_sum;
-    sat.sum_sq = sat_sum_sq;
-    sat.count = sat_count;
+    sat.sum = ctx->sat_sum;
+    sat.sum_sq = ctx->sat_sum_sq;
+    sat.count = ctx->sat_count;
     sat.nx = nx;
     sat.ny = ny;
     sat.stride = stride;
@@ -158,9 +208,9 @@ int mxspots_find_spots(
                 r_sum_sq += (double)v * v;
                 r_count += 1;
             }
-            sat_sum[row_offset + (x + 1)] = r_sum;
-            sat_sum_sq[row_offset + (x + 1)] = r_sum_sq;
-            sat_count[row_offset + (x + 1)] = r_count;
+            ctx->sat_sum[row_offset + (x + 1)] = r_sum;
+            ctx->sat_sum_sq[row_offset + (x + 1)] = r_sum_sq;
+            ctx->sat_count[row_offset + (x + 1)] = r_count;
         }
     }
 
@@ -172,12 +222,12 @@ int mxspots_find_spots(
         int c_count = 0;
         for (int y = 1; y <= ny; ++y) {
             int idx = y * stride + x;
-            c_sum += sat_sum[idx];
-            c_sum_sq += sat_sum_sq[idx];
-            c_count += sat_count[idx];
-            sat_sum[idx] = c_sum;
-            sat_sum_sq[idx] = c_sum_sq;
-            sat_count[idx] = c_count;
+            c_sum += ctx->sat_sum[idx];
+            c_sum_sq += ctx->sat_sum_sq[idx];
+            c_count += ctx->sat_count[idx];
+            ctx->sat_sum[idx] = c_sum;
+            ctx->sat_sum_sq[idx] = c_sum_sq;
+            ctx->sat_count[idx] = c_count;
         }
     }
 
@@ -206,20 +256,15 @@ int mxspots_find_spots(
         }
     }
 
-    /* Candidate pixel mask - parallelized across rows using O(1) Integral Image Annulus */
+    /* Clear and populate candidate pixel mask */
     int total_pixels = nx * ny;
-    uint8_t *mask = (uint8_t *)calloc(total_pixels, sizeof(uint8_t));
-    if (mask == NULL) {
-        free(sat_sum);
-        free(sat_sum_sq);
-        free(sat_count);
-        return 0;
-    }
+    int8_t *mask = ctx->mask;
+    memset(mask, 0, total_pixels * sizeof(int8_t));
 
     #pragma omp parallel for schedule(static)
     for (int y = 0; y < ny; ++y) {
         const float *row = &data[y * nx];
-        uint8_t *mask_row = &mask[y * nx];
+        int8_t *mask_row = &mask[y * nx];
         float ry = (y - params->beam_y) * params->pixel_size_y;
         float ry2 = ry * ry;
 
@@ -241,39 +286,34 @@ int mxspots_find_spots(
 
             float threshold = bg + params->snr_threshold * std;
             if (v > threshold) {
-                mask_row[x] = 1;
+                mask_row[x] = 1; /* Candidate strong pixel */
             }
         }
     }
 
-    /* Connected component analysis */
-    int *queue = (int *)malloc(total_pixels * sizeof(int));
-    int spot_capacity = 4096;
+    /* Connected component analysis using bounded stack ring buffer */
     int spot_count = 0;
-    MxSpot *spots = (MxSpot *)malloc(spot_capacity * sizeof(MxSpot));
+    MxSpot *spots = ctx->spots_buf;
+    int spot_capacity = ctx->spots_capacity;
 
-    if (queue == NULL || spots == NULL) {
-        free(sat_sum);
-        free(sat_sum_sq);
-        free(sat_count);
-        free(mask);
-        free(queue);
-        free(spots);
-        return 0;
-    }
+    int ring_queue[BFS_QUEUE_CAPACITY];
 
     for (int y = 0; y < ny; ++y) {
         for (int x = 0; x < nx; ++x) {
             int idx = y * nx + x;
-            if (mask[idx] == 0) {
+            if (mask[idx] != 1) {
                 continue;
             }
 
             /* Start BFS connected component */
             int head = 0;
             int tail = 0;
-            queue[tail++] = idx;
-            mask[idx] = 0;
+            int q_count = 0;
+
+            ring_queue[tail] = idx;
+            tail = (tail + 1) % BFS_QUEUE_CAPACITY;
+            q_count++;
+            mask[idx] = -1; /* Mark visited */
 
             int area = 0;
             double sum_I = 0.0;
@@ -283,8 +323,11 @@ int mxspots_find_spots(
             float max_I = -1e9f;
             float max_snr = 0.0f;
 
-            while (head < tail) {
-                int curr = queue[head++];
+            while (q_count > 0) {
+                int curr = ring_queue[head];
+                head = (head + 1) % BFS_QUEUE_CAPACITY;
+                q_count--;
+
                 int cy = curr / nx;
                 int cx = curr % nx;
                 float c_val = data[curr];
@@ -315,9 +358,13 @@ int mxspots_find_spots(
                         if (nx_coord < 0 || nx_coord >= nx) continue;
 
                         int n_idx = ny_coord * nx + nx_coord;
-                        if (mask[n_idx] != 0) {
-                            mask[n_idx] = 0;
-                            queue[tail++] = n_idx;
+                        if (mask[n_idx] == 1) {
+                            mask[n_idx] = -1; /* Mark visited */
+                            if (q_count < BFS_QUEUE_CAPACITY && area < params->max_spot_area + 20) {
+                                ring_queue[tail] = n_idx;
+                                tail = (tail + 1) % BFS_QUEUE_CAPACITY;
+                                q_count++;
+                            }
                         }
                     }
                 }
@@ -343,21 +390,14 @@ int mxspots_find_spots(
                     continue;
                 }
 
-                if (spot_count >= spot_capacity) {
-                    spot_capacity *= 2;
-                    MxSpot *new_spots = (MxSpot *)realloc(spots, spot_capacity * sizeof(MxSpot));
-                    if (new_spots == NULL) {
-                        break;
-                    }
-                    spots = new_spots;
+                if (spot_count < spot_capacity) {
+                    spots[spot_count].x = cx;
+                    spots[spot_count].y = cy;
+                    spots[spot_count].d_spacing = d;
+                    spots[spot_count].intensity = (float)sum_I;
+                    spots[spot_count].snr = max_snr;
+                    spot_count++;
                 }
-
-                spots[spot_count].x = cx;
-                spots[spot_count].y = cy;
-                spots[spot_count].d_spacing = d;
-                spots[spot_count].intensity = (float)sum_I;
-                spots[spot_count].snr = max_snr;
-                spot_count++;
             }
         }
     }
@@ -373,13 +413,28 @@ int mxspots_find_spots(
         memcpy(out_spots, spots, copy_count * sizeof(MxSpot));
     }
 
-    free(sat_sum);
-    free(sat_sum_sq);
-    free(sat_count);
-    free(mask);
-    free(queue);
-    free(spots);
+    return spot_count;
+}
 
+int mxspots_find_spots(
+    const float *data,
+    int nx,
+    int ny,
+    const MxSpotsParams *params,
+    MxSpot *out_spots,
+    int max_spots
+) {
+    if (data == NULL || nx <= 0 || ny <= 0 || params == NULL) {
+        return 0;
+    }
+
+    MxSpotsContext *ctx = mxspots_create_context(nx, ny);
+    if (ctx == NULL) {
+        return 0;
+    }
+
+    int spot_count = mxspots_find_spots_ctx(ctx, data, nx, ny, params, out_spots, max_spots);
+    mxspots_free_context(ctx);
     return spot_count;
 }
 

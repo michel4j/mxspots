@@ -1,5 +1,5 @@
 from .models import SpotParams, Spot, SpotList, ScoreResult, IndexResult
-from .spotfinder import findspots, findspots_data
+from .spotfinder import findspots, findspots_data, SpotFinderContext
 from .scorer import score, score_data, score_spots
 from .indexer import index, index_data, index_spots
 from .synthetic import (
@@ -18,6 +18,7 @@ __all__ = [
     "SpotList",
     "ScoreResult",
     "IndexResult",
+    "SpotFinderContext",
     "findspots",
     "findspots_data",
     "score",

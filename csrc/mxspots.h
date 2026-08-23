@@ -1,80 +1,114 @@
 #ifndef MXSPOTS_H
 #define MXSPOTS_H
 
-#include <stdint.h>
-#include <stddef.h>
-
-#ifdef _WIN32
-    #ifdef MXSPOTS_EXPORTS
-        #define MXSPOTS_API __declspec(dllexport)
-    #else
-        #define MXSPOTS_API __declspec(dllimport)
-    #endif
-#else
-    #define MXSPOTS_API __attribute__((visibility("default")))
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if defined(_WIN32) || defined(__CYGWIN__)
+  #ifdef MXSPOTS_EXPORTS
+    #define MXSPOTS_API __declspec(dllexport)
+  #else
+    #define MXSPOTS_API __declspec(dllimport)
+  #endif
+#else
+  #if __GNUC__ >= 4
+    #define MXSPOTS_API __attribute__ ((visibility ("default")))
+  #else
+    #define MXSPOTS_API
+  #endif
+#endif
+
+#include <stdint.h>
+
+/**
+ * Parameters controlling spot detection, resolution range, and detector geometry.
+ */
 typedef struct {
     float snr_threshold;       /* Signal-to-noise ratio threshold */
-    int min_spot_area;         /* Minimum connected pixels for a spot */
-    int max_spot_area;         /* Maximum connected pixels for a spot */
-    float beam_x;              /* Beam center X (pixels) */
-    float beam_y;              /* Beam center Y (pixels) */
-    float pixel_size_x;        /* Pixel size X (mm) */
-    float pixel_size_y;        /* Pixel size Y (mm) */
-    float distance;            /* Detector distance (mm) */
-    float wavelength;          /* X-ray wavelength (Angstroms) */
-    float d_min;               /* High-resolution cutoff (Angstroms, 0 for unbounded) */
-    float d_max;               /* Low-resolution cutoff (Angstroms, e.g. 30.0) */
+    int min_spot_area;         /* Minimum connected pixels */
+    int max_spot_area;         /* Maximum connected pixels */
+    float beam_x;              /* Beam center X in pixels */
+    float beam_y;              /* Beam center Y in pixels */
+    float pixel_size_x;        /* Detector pixel size X in mm */
+    float pixel_size_y;        /* Detector pixel size Y in mm */
+    float distance;            /* Sample-to-detector distance in mm */
+    float wavelength;          /* Incident X-ray wavelength in Angstroms */
+    float d_min;               /* High-resolution limit in Angstroms (0 = unbounded) */
+    float d_max;               /* Low-resolution limit in Angstroms */
 } MxSpotsParams;
 
+/**
+ * Detected spot representation.
+ */
 typedef struct {
-    float x;
-    float y;
-    float d_spacing;
-    float intensity;
-    float snr;
+    float x;                   /* Centroid X in pixel coordinates */
+    float y;                   /* Centroid Y in pixel coordinates */
+    float d_spacing;           /* Bragg resolution d-spacing in Angstroms */
+    float intensity;           /* Integrated spot intensity */
+    float snr;                 /* Peak SNR */
 } MxSpot;
 
+/**
+ * Diffraction frame quality score metrics.
+ */
 typedef struct {
-    int spot_count;
-    float avg_snr;
-    float d_min;
-    float percentage_indexed;
+    int spot_count;            /* Number of detected spots */
+    float avg_snr;             /* Average signal-to-noise ratio */
+    float d_min;               /* Maximum observable resolution in Angstroms */
+    float percentage_indexed;  /* Indexable fraction percentage (0.0 if not indexed) */
 } MxScoreResult;
 
+/**
+ * Reciprocal lattice indexing result.
+ */
 typedef struct {
     float unit_cell[6];        /* a, b, c (Angstroms), alpha, beta, gamma (degrees) */
-    float percentage_indexed;  /* 0.0 - 100.0 % */
-    int indexed_spot_count;    /* Number of spots matching lattice */
-    int total_spot_count;      /* Total number of spots evaluated */
+    float percentage_indexed;  /* Fraction of spots indexed to candidate lattice (0-100%) */
+    int indexed_spot_count;    /* Number of spots conforming to lattice */
+    int total_spot_count;      /* Total spots evaluated */
 } MxIndexResult;
 
 /**
- * Returns the version number of libmxspots.
+ * Reusable execution scratch context for zero-allocation batch spot finding.
+ */
+typedef struct MxSpotsContext MxSpotsContext;
+
+/**
+ * Returns the library version code.
  */
 MXSPOTS_API int mxspots_get_version(void);
 
 /**
- * Simple ping function validating parameter struct transfer.
- * Returns 0 on success, non-zero if params pointer is NULL.
+ * Validates parameter configuration.
  */
 MXSPOTS_API int mxspots_ping(const MxSpotsParams *params);
 
 /**
- * Detect spots in a 2D float32 diffraction image.
- *
- * @param data       Pointer to row-major 2D float32 image array (size nx * ny).
- * @param nx         Image width in pixels.
- * @param ny         Image height in pixels.
- * @param params     Spot finding parameters and experimental geometry.
- * @param out_spots  Buffer to store detected spots (can be NULL to only count).
- * @param max_spots  Maximum capacity of out_spots.
- * @return           Total number of detected spots.
+ * Allocates a reusable context with scratch buffers for frames up to max_nx x max_ny.
+ */
+MXSPOTS_API MxSpotsContext *mxspots_create_context(int max_nx, int max_ny);
+
+/**
+ * Frees a previously created context and its internal scratch buffers.
+ */
+MXSPOTS_API void mxspots_free_context(MxSpotsContext *ctx);
+
+/**
+ * Core spot finding routine using a pre-allocated scratch context (zero allocations).
+ */
+MXSPOTS_API int mxspots_find_spots_ctx(
+    MxSpotsContext *ctx,
+    const float *data,
+    int nx,
+    int ny,
+    const MxSpotsParams *params,
+    MxSpot *out_spots,
+    int max_spots
+);
+
+/**
+ * Core spot finding routine. Detects diffraction spots in a 2D float image frame.
  */
 MXSPOTS_API int mxspots_find_spots(
     const float *data,
@@ -86,12 +120,7 @@ MXSPOTS_API int mxspots_find_spots(
 );
 
 /**
- * Compute quality score metrics from a detected spot list.
- *
- * @param spots      Array of detected spots.
- * @param spot_count Number of spots in array.
- * @param out_score  Pointer to MxScoreResult struct to receive quality metrics.
- * @return           0 on success, non-zero on error.
+ * Computes diffraction frame quality score from a pre-calculated spot list.
  */
 MXSPOTS_API int mxspots_score_spots(
     const MxSpot *spots,
@@ -100,14 +129,7 @@ MXSPOTS_API int mxspots_score_spots(
 );
 
 /**
- * Compute quality score metrics directly from a 2D float32 diffraction image.
- *
- * @param data       Pointer to row-major 2D float32 image array (size nx * ny).
- * @param nx         Image width in pixels.
- * @param ny         Image height in pixels.
- * @param params     Spot finding parameters and experimental geometry.
- * @param out_score  Pointer to MxScoreResult struct to receive quality metrics.
- * @return           0 on success, non-zero on error.
+ * End-to-end frame scoring routine: finds spots and computes quality metrics.
  */
 MXSPOTS_API int mxspots_score_frame(
     const float *data,
@@ -118,13 +140,7 @@ MXSPOTS_API int mxspots_score_frame(
 );
 
 /**
- * Index a list of detected spots using 1D/3D reciprocal lattice FFT search.
- *
- * @param spots      Array of detected spots.
- * @param spot_count Number of spots in array.
- * @param params     Experimental geometry parameters.
- * @param out_index  Pointer to MxIndexResult struct to receive unit cell and percentage indexed.
- * @return           0 on success, non-zero on error.
+ * Indexes reciprocal lattice directly from a detected spot list.
  */
 MXSPOTS_API int mxspots_index_spots(
     const MxSpot *spots,
@@ -134,14 +150,7 @@ MXSPOTS_API int mxspots_index_spots(
 );
 
 /**
- * Find spots and index lattice directly from a 2D float32 diffraction image.
- *
- * @param data       Pointer to row-major 2D float32 image array (size nx * ny).
- * @param nx         Image width in pixels.
- * @param ny         Image height in pixels.
- * @param params     Spot finding parameters and experimental geometry.
- * @param out_index  Pointer to MxIndexResult struct to receive unit cell and percentage indexed.
- * @return           0 on success, non-zero on error.
+ * Indexes reciprocal lattice directly from a raw 2D diffraction image frame.
  */
 MXSPOTS_API int mxspots_index_frame(
     const float *data,

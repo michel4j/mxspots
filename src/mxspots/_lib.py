@@ -67,6 +67,10 @@ class CMxIndexResult(ctypes.Structure):
     ]
 
 
+class CMxSpotsContext(ctypes.c_void_p):
+    pass
+
+
 _LIB_CACHE: Optional[ctypes.CDLL] = None
 
 
@@ -119,6 +123,25 @@ def get_lib() -> ctypes.CDLL:
     # Ping check
     lib.mxspots_ping.argtypes = [ctypes.POINTER(CMxSpotsParams)]
     lib.mxspots_ping.restype = ctypes.c_int
+
+    # Context management
+    lib.mxspots_create_context.argtypes = [ctypes.c_int, ctypes.c_int]
+    lib.mxspots_create_context.restype = ctypes.c_void_p
+
+    lib.mxspots_free_context.argtypes = [ctypes.c_void_p]
+    lib.mxspots_free_context.restype = None
+
+    # Find spots with context
+    lib.mxspots_find_spots_ctx.argtypes = [
+        ctypes.c_void_p,                       # ctx
+        ctypes.POINTER(ctypes.c_float),        # data
+        ctypes.c_int,                          # nx
+        ctypes.c_int,                          # ny
+        ctypes.POINTER(CMxSpotsParams),        # params
+        ctypes.POINTER(CMxSpot),               # out_spots
+        ctypes.c_int,                          # max_spots
+    ]
+    lib.mxspots_find_spots_ctx.restype = ctypes.c_int
 
     # Find spots
     lib.mxspots_find_spots.argtypes = [
