@@ -5,7 +5,6 @@ from pathlib import Path
 from mxspots.models import SpotParams, SpotList, ScoreResult
 from mxspots.spotfinder import findspots, findspots_data
 from mxspots.scorer import score, score_data
-from mxspots.indexer import index, index_data
 from mxspots.synthetic import add_powder_ring
 
 
@@ -145,10 +144,3 @@ def test_score_cli_ice_mask_flags(test_data_dir, monkeypatch, capsys):
     assert "ice_score" in data
     assert "ice_rings_detected" in data
     assert data["ice_score"] > 0.0
-
-
-def test_index_with_ice_masking(clean_frame):
-    # Test index with ice_mask=True on clean frame
-    res = index(clean_frame, params=SpotParams(ice_mask=True))
-    assert res.total_spot_count > 0
-    assert res.percentage_indexed >= 50.0

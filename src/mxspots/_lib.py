@@ -87,25 +87,15 @@ class CMxSpot(ctypes.Structure):
 class CMxScoreResult(ctypes.Structure):
     _fields_ = [
         ("spot_count", ctypes.c_int),
+        ("bragg_spots", ctypes.c_int),
+        ("bragg_percent", ctypes.c_float),
+        ("avg_intensity", ctypes.c_float),
         ("avg_snr", ctypes.c_float),
         ("d_min", ctypes.c_float),
-        ("percentage_indexed", ctypes.c_float),
-        ("indexed_spot_count", ctypes.c_int),
         ("ice_score", ctypes.c_float),
         ("num_ice_rings", ctypes.c_int),
-        ("percentage_regular", ctypes.c_float),
-        ("regular_spot_count", ctypes.c_int),
         ("num_lattices", ctypes.c_int),
         ("score", ctypes.c_float),
-    ]
-
-
-class CMxIndexResult(ctypes.Structure):
-    _fields_ = [
-        ("unit_cell", ctypes.c_float * 6),
-        ("percentage_indexed", ctypes.c_float),
-        ("indexed_spot_count", ctypes.c_int),
-        ("total_spot_count", ctypes.c_int),
     ]
 
 
@@ -236,30 +226,12 @@ def get_lib() -> ctypes.CDLL:
         ctypes.POINTER(CMxSpot),               # spots
         ctypes.c_int,                          # spot_count
         ctypes.POINTER(CMxSpotsParams),        # params
-        ctypes.POINTER(ctypes.c_float),        # out_pct_regular
-        ctypes.POINTER(ctypes.c_int),          # out_reg_count
+        ctypes.POINTER(ctypes.c_float),        # out_bragg_percent
+        ctypes.POINTER(ctypes.c_int),          # out_bragg_spots
+        ctypes.POINTER(ctypes.c_float),        # out_avg_intensity
         ctypes.POINTER(ctypes.c_int),          # out_num_lattices
     ]
     lib.mxspots_analyze_regularity.restype = ctypes.c_int
-
-    # Index spots
-    lib.mxspots_index_spots.argtypes = [
-        ctypes.POINTER(CMxSpot),               # spots
-        ctypes.c_int,                          # spot_count
-        ctypes.POINTER(CMxSpotsParams),        # params
-        ctypes.POINTER(CMxIndexResult),        # out_index
-    ]
-    lib.mxspots_index_spots.restype = ctypes.c_int
-
-    # Index frame directly
-    lib.mxspots_index_frame.argtypes = [
-        ctypes.POINTER(ctypes.c_float),        # data
-        ctypes.c_int,                          # nx
-        ctypes.c_int,                          # ny
-        ctypes.POINTER(CMxSpotsParams),        # params
-        ctypes.POINTER(CMxIndexResult),        # out_index
-    ]
-    lib.mxspots_index_frame.restype = ctypes.c_int
 
     # Detect ice rings
     lib.mxspots_detect_ice.argtypes = [

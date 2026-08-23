@@ -22,7 +22,6 @@ dev = [
 [project.scripts]
 "mxspots.findspots" = "mxspots.cli:findspots_main"
 "mxspots.score"     = "mxspots.cli:score_main"
-"mxspots.index"     = "mxspots.cli:index_main"
 
 [build-system]
 requires = ["scikit-build-core>=0.10"]

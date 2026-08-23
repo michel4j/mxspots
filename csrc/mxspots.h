@@ -58,27 +58,16 @@ typedef struct {
  */
 typedef struct {
     int spot_count;            /* Number of detected spots */
+    int bragg_spots;           /* Number of regular Bragg spots */
+    float bragg_percent;       /* Fraction of spots conforming to regular lattice graph (0-100%) */
+    float avg_intensity;       /* Mean integrated intensity of regular Bragg spots */
     float avg_snr;             /* Average signal-to-noise ratio */
     float d_min;               /* 95th percentile resolution limit in Angstroms */
-    float percentage_indexed;  /* Indexable fraction percentage (0.0 if not indexed) */
-    int indexed_spot_count;    /* Number of spots conforming to lattice */
     float ice_score;           /* Ice contamination score */
     int num_ice_rings;         /* Number of detected ice rings */
-    float percentage_regular;  /* Fraction of spots conforming to regular lattice graph */
-    int regular_spot_count;    /* Number of regular spots */
     int num_lattices;          /* Number of distinct crystal lattices identified */
     float score;               /* Unified composite quality score (0.0 - 100.0) */
 } MxScoreResult;
-
-/**
- * Reciprocal lattice indexing result.
- */
-typedef struct {
-    float unit_cell[6];        /* a, b, c (Angstroms), alpha, beta, gamma (degrees) */
-    float percentage_indexed;  /* Fraction of spots indexed to candidate lattice (0-100%) */
-    int indexed_spot_count;    /* Number of spots conforming to lattice */
-    int total_spot_count;      /* Total spots evaluated */
-} MxIndexResult;
 
 /**
  * Detected ice ring representation.
@@ -176,30 +165,10 @@ MXSPOTS_API int mxspots_analyze_regularity(
     const MxSpot *spots,
     int spot_count,
     const MxSpotsParams *params,
-    float *out_pct_regular,
-    int *out_reg_count,
+    float *out_bragg_percent,
+    int *out_bragg_spots,
+    float *out_avg_intensity,
     int *out_num_lattices
-);
-
-/**
- * Indexes reciprocal lattice directly from a detected spot list.
- */
-MXSPOTS_API int mxspots_index_spots(
-    const MxSpot *spots,
-    int spot_count,
-    const MxSpotsParams *params,
-    MxIndexResult *out_index
-);
-
-/**
- * Indexes reciprocal lattice directly from a raw 2D diffraction image frame.
- */
-MXSPOTS_API int mxspots_index_frame(
-    const float *data,
-    int nx,
-    int ny,
-    const MxSpotsParams *params,
-    MxIndexResult *out_index
 );
 
 /**

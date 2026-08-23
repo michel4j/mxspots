@@ -25,21 +25,24 @@ def test_c_regularity_clean_frame(clean_frame):
     spot_count = lib.mxspots_find_spots(data_ptr, nx, ny, ctypes.byref(c_params), c_spots, max_spots)
     assert spot_count > 20
 
-    pct_reg = ctypes.c_float(0.0)
-    reg_count = ctypes.c_int(0)
+    bragg_pct = ctypes.c_float(0.0)
+    bragg_spots = ctypes.c_int(0)
+    avg_intensity = ctypes.c_float(0.0)
     num_lattices = ctypes.c_int(0)
 
     ret = lib.mxspots_analyze_regularity(
         c_spots,
         spot_count,
         ctypes.byref(c_params),
-        ctypes.byref(pct_reg),
-        ctypes.byref(reg_count),
+        ctypes.byref(bragg_pct),
+        ctypes.byref(bragg_spots),
+        ctypes.byref(avg_intensity),
         ctypes.byref(num_lattices),
     )
     assert ret == 0
-    assert pct_reg.value > 50.0
-    assert reg_count.value > 10
+    assert bragg_pct.value > 50.0
+    assert bragg_spots.value > 10
+    assert avg_intensity.value > 0.0
     assert num_lattices.value >= 1
 
 
@@ -66,20 +69,22 @@ def test_c_regularity_random_noise_spots():
         c_spots[i].intensity = float(rng.uniform(500, 2000))
         c_spots[i].snr = 10.0
 
-    pct_reg = ctypes.c_float(0.0)
-    reg_count = ctypes.c_int(0)
+    bragg_pct = ctypes.c_float(0.0)
+    bragg_spots = ctypes.c_int(0)
+    avg_intensity = ctypes.c_float(0.0)
     num_lattices = ctypes.c_int(0)
 
     ret = lib.mxspots_analyze_regularity(
         c_spots,
         n_spots,
         ctypes.byref(c_params),
-        ctypes.byref(pct_reg),
-        ctypes.byref(reg_count),
+        ctypes.byref(bragg_pct),
+        ctypes.byref(bragg_spots),
+        ctypes.byref(avg_intensity),
         ctypes.byref(num_lattices),
     )
     assert ret == 0
-    assert pct_reg.value < 30.0
+    assert bragg_pct.value < 30.0
     assert num_lattices.value <= 1
 
 
@@ -88,19 +93,22 @@ def test_c_regularity_empty():
     params = SpotParams()
     c_params = CMxSpotsParams.from_params(params)
 
-    pct_reg = ctypes.c_float(0.0)
-    reg_count = ctypes.c_int(0)
+    bragg_pct = ctypes.c_float(0.0)
+    bragg_spots = ctypes.c_int(0)
+    avg_intensity = ctypes.c_float(0.0)
     num_lattices = ctypes.c_int(0)
 
     ret = lib.mxspots_analyze_regularity(
         None,
         0,
         ctypes.byref(c_params),
-        ctypes.byref(pct_reg),
-        ctypes.byref(reg_count),
+        ctypes.byref(bragg_pct),
+        ctypes.byref(bragg_spots),
+        ctypes.byref(avg_intensity),
         ctypes.byref(num_lattices),
     )
     assert ret == 0
-    assert pct_reg.value == 0.0
-    assert reg_count.value == 0
+    assert bragg_pct.value == 0.0
+    assert bragg_spots.value == 0
+    assert avg_intensity.value == 0.0
     assert num_lattices.value == 0

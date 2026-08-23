@@ -1,4 +1,4 @@
-from .models import IceRing, SpotParams, Spot, SpotList, ScoreResult, IndexResult
+from .models import IceRing, SpotParams, Spot, SpotList, ScoreResult
 from .spotfinder import (
     findspots,
     findspots_data,
@@ -7,7 +7,6 @@ from .spotfinder import (
     SpotFinderContext,
 )
 from .scorer import score, score_data, score_spots
-from .indexer import index, index_data, index_spots
 from .synthetic import (
     SyntheticSpec,
     SyntheticFrame,
@@ -25,7 +24,6 @@ __all__ = [
     "Spot",
     "SpotList",
     "ScoreResult",
-    "IndexResult",
     "SpotFinderContext",
     "findspots",
     "findspots_data",
@@ -34,9 +32,6 @@ __all__ = [
     "score",
     "score_data",
     "score_spots",
-    "index",
-    "index_data",
-    "index_spots",
     "SyntheticSpec",
     "SyntheticFrame",
     "load_synthetic_spec",

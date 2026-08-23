@@ -88,30 +88,16 @@ class SpotList:
 @dataclass(frozen=True)
 class ScoreResult:
     spot_count: int
+    bragg_spots: int
+    bragg_percent: float
+    avg_intensity: float
     avg_snr: float
     d_min: float
-    percentage_indexed: Optional[float] = None
-    indexed_spot_count: Optional[int] = None
-    regular_spot_count: Optional[int] = None
-    num_lattices: Optional[int] = None
-    ice_score: Optional[float] = None
-    ice_rings_detected: Optional[List[float]] = None
-    percentage_regular: float = 0.0
+    ice_score: float = 0.0
+    num_ice_rings: int = 0
+    num_lattices: int = 0
     score: float = 0.0
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    def to_json(self, indent: Optional[int] = None) -> str:
-        return json.dumps(self.to_dict(), indent=indent)
-
-
-@dataclass(frozen=True)
-class IndexResult:
-    unit_cell: List[float]
-    percentage_indexed: float
-    indexed_spot_count: int
-    total_spot_count: int
+    ice_rings_detected: Optional[List[float]] = None
 
     def to_dict(self) -> dict:
         return asdict(self)

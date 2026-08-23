@@ -49,9 +49,11 @@ def test_spot_list_ice_metadata():
 def test_score_result_ice_metadata():
     res = ScoreResult(
         spot_count=50,
+        bragg_spots=45,
+        bragg_percent=90.0,
+        avg_intensity=120.0,
         avg_snr=6.5,
         d_min=1.8,
-        percentage_indexed=90.0,
         ice_score=4.8,
         ice_rings_detected=[3.897, 3.669],
     )

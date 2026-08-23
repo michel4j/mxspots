@@ -18,14 +18,9 @@ def test_score_clean_frame(test_data_dir):
     assert result.d_min < 5.0
     assert result.score > 50.0
     assert result.score <= 100.0
-    # Decoupled indexing: percentage_indexed should be None by default in score()
-    assert result.percentage_indexed is None
-    assert result.indexed_spot_count is None
-    assert result.percentage_regular is not None
-    assert result.percentage_regular > 0.0
-    assert result.regular_spot_count is not None
-    assert result.regular_spot_count > 0
-    assert result.num_lattices is not None
+    assert result.bragg_percent > 0.0
+    assert result.bragg_spots > 0
+    assert result.avg_intensity > 0.0
     assert result.num_lattices >= 1
 
 
@@ -36,17 +31,16 @@ def test_score_data_empty():
     result = score_data(empty_data)
 
     assert result.spot_count == 0
+    assert result.bragg_spots == 0
+    assert result.bragg_percent == pytest.approx(0.0)
+    assert result.avg_intensity == pytest.approx(0.0)
     assert result.avg_snr == pytest.approx(0.0)
     assert result.d_min >= 999.0
     assert result.score == pytest.approx(0.0)
-    assert result.percentage_indexed is None
-    assert result.indexed_spot_count is None
-    assert result.percentage_regular is None
-    assert result.regular_spot_count is None
-    assert result.num_lattices is None
+    assert result.num_lattices == 0
 
 
-def test_score_spots_decoupled_indexing():
+def test_score_spots_regularity_pipeline():
     from mxspots.scorer import score_spots
 
     spots = [
@@ -68,13 +62,12 @@ def test_score_spots_decoupled_indexing():
     assert result.avg_snr == pytest.approx(25.0)
     assert result.d_min == pytest.approx(2.5)
     assert result.score > 0.0
-    assert result.percentage_indexed is None
-    assert result.indexed_spot_count is None
-    assert result.percentage_regular is not None
-    assert result.num_lattices is not None
+    assert result.bragg_spots >= 0
+    assert result.bragg_percent >= 0.0
+    assert result.avg_intensity >= 0.0
 
 
-def test_score_spots_explicit_indexing():
+def test_score_spots_explicit_bragg_values():
     from mxspots.scorer import score_spots
 
     spots = [
@@ -92,13 +85,14 @@ def test_score_spots_explicit_indexing():
     result = score_spots(
         spots,
         params=params,
-        percentage_indexed=85.0,
-        indexed_spot_count=25,
+        bragg_spots=25,
+        bragg_percent=85.0,
+        avg_intensity=950.0,
     )
 
-    assert isinstance(result, ScoreResult)
-    assert result.percentage_indexed == 85.0
-    assert result.indexed_spot_count == 25
+    assert result.bragg_spots == 25
+    assert result.bragg_percent == 85.0
+    assert result.avg_intensity == 950.0
     assert result.score > 0.0
 
 
@@ -109,7 +103,7 @@ def test_score_ice_frame_metrics(test_data_dir):
     result = score(yaml_path)
 
     assert isinstance(result, ScoreResult)
-    assert result.ice_score is not None
+    assert result.ice_score > 0.0
     assert result.ice_rings_detected is not None
     assert len(result.ice_rings_detected) > 0
 
@@ -122,12 +116,10 @@ def test_score_lyso_split_multi_lattice(test_data_dir):
 
     assert isinstance(result, ScoreResult)
     assert result.spot_count > 100
-    assert result.percentage_regular is not None
-    assert result.percentage_regular > 60.0
-    assert result.regular_spot_count is not None
-    assert result.regular_spot_count > 100
+    assert result.bragg_percent > 60.0
+    assert result.bragg_spots > 100
+    assert result.avg_intensity > 0.0
     # Multi-lattice frame should detect more than 1 lattice cluster
-    assert result.num_lattices is not None
     assert result.num_lattices > 1
 
 
@@ -146,11 +138,10 @@ def test_score_cli_json(test_data_dir, capsys, monkeypatch):
     assert "avg_snr" in data
     assert "d_min" in data
     assert "score" in data
-    assert "percentage_regular" in data
-    assert "regular_spot_count" in data
+    assert "bragg_percent" in data
+    assert "bragg_spots" in data
+    assert "avg_intensity" in data
     assert "num_lattices" in data
-    assert data["percentage_indexed"] is None
-    assert data["indexed_spot_count"] is None
     assert data["spot_count"] > 0
 
 
@@ -169,7 +160,9 @@ def test_score_cli_text(test_data_dir, capsys, monkeypatch):
     assert "Average SNR" in captured.out
     assert "Resolution Limit" in captured.out
     assert "95th percentile" in captured.out
-    assert "Bragg Regularity:" in captured.out
+    assert "Bragg Spots:" in captured.out
+    assert "Bragg %:" in captured.out
+    assert "Avg Intensity:" in captured.out
     assert "Percentage Indexed:" not in captured.out
     assert "Indexed Spots:" not in captured.out
 
@@ -184,5 +177,5 @@ def test_score_cli_split_warning(test_data_dir, capsys, monkeypatch):
     captured = capsys.readouterr()
 
     assert "Quality Score for" in captured.out
-    assert "Bragg Regularity:" in captured.out
+    assert "Bragg Spots:" in captured.out
     assert "Warning: Multi-lattice / split crystal detected" in captured.out

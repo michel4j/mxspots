@@ -1,5 +1,6 @@
 import pytest
 import ctypes
+import math
 import numpy as np
 from mxspots._lib import get_lib, CMxSpotsParams, CMxSpot, CMxScoreResult
 from mxspots.models import SpotParams
@@ -31,8 +32,9 @@ def test_c_mxspots_score_spots_95th_percentile():
         c_spots[i].snr = 15.0
 
     out_score = CMxScoreResult()
-    out_score.percentage_indexed = 90.0
-    out_score.indexed_spot_count = 90
+    out_score.bragg_percent = 90.0
+    out_score.bragg_spots = 90
+    out_score.avg_intensity = 500.0
     out_score.ice_score = 0.0
     out_score.num_ice_rings = 0
 
@@ -46,12 +48,35 @@ def test_c_mxspots_score_spots_95th_percentile():
     assert out_score.score <= 100.0
 
 
+def test_c_mxspots_score_spots_gating_zero_bragg():
+    lib = get_lib()
+    n_spots = 50
+    c_spots = (CMxSpot * n_spots)()
+    for i in range(n_spots):
+        c_spots[i].x = float(100 + i)
+        c_spots[i].y = float(100 + i)
+        c_spots[i].d_spacing = 2.0
+        c_spots[i].intensity = 500.0
+        c_spots[i].snr = 20.0
+
+    # 0 Bragg spots -> score must be 0.0 regardless of spot count or SNR
+    out_score = CMxScoreResult()
+    out_score.bragg_spots = 0
+    out_score.bragg_percent = 0.0
+    out_score.avg_intensity = 0.0
+
+    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_score))
+    assert ret == 0
+    assert out_score.score == pytest.approx(0.0)
+
+
 def test_c_mxspots_score_spots_empty():
     lib = get_lib()
     out_score = CMxScoreResult()
     ret = lib.mxspots_score_spots(None, 0, ctypes.byref(out_score))
     assert ret == 0
     assert out_score.spot_count == 0
+    assert out_score.bragg_spots == 0
     assert out_score.d_min >= 999.0
     assert out_score.avg_snr == pytest.approx(0.0)
     assert out_score.score == pytest.approx(0.0)
@@ -77,43 +102,48 @@ def test_c_mxspots_score_frame_clean(clean_frame):
 
     assert ret == 0
     assert out_score.spot_count > 0
+    assert out_score.bragg_spots > 0
+    assert out_score.bragg_percent > 50.0
     assert out_score.avg_snr > 10.0
     assert out_score.d_min < 3.0
     assert out_score.score > 50.0
 
 
-def test_c_mxspots_score_snr_saturation_and_multi_lattice():
+def test_c_mxspots_score_logistic_monotonicity():
     lib = get_lib()
 
-    # Create identical spots with varying SNR and num_lattices
-    def compute_score(snr_val: float, num_lattices: int) -> float:
+    def compute_score(n_bragg: int, snr_val: float, d_val: float, num_ice: int) -> float:
         n_spots = 100
         c_spots = (CMxSpot * n_spots)()
         for i in range(n_spots):
             c_spots[i].x = float(100 + i)
             c_spots[i].y = float(100 + i)
-            c_spots[i].d_spacing = 2.0
+            c_spots[i].d_spacing = d_val
             c_spots[i].intensity = 1000.0
             c_spots[i].snr = snr_val
 
         out_score = CMxScoreResult()
-        out_score.percentage_regular = 80.0
-        out_score.regular_spot_count = 80
-        out_score.num_lattices = num_lattices
+        out_score.bragg_spots = n_bragg
+        out_score.bragg_percent = float(n_bragg)
+        out_score.avg_intensity = 1000.0
+        out_score.num_ice_rings = num_ice
+        out_score.ice_score = float(num_ice) * 2.5
 
         ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_score))
         assert ret == 0
         return out_score.score
 
-    score_snr50 = compute_score(50.0, 1)
-    score_snr100 = compute_score(100.0, 1)
-    score_snr200 = compute_score(200.0, 1)
+    # Increasing Bragg spots increases score
+    s10 = compute_score(10, 20.0, 2.0, 0)
+    s80 = compute_score(80, 20.0, 2.0, 0)
+    assert s80 > s10
 
-    # SNR 100 awards 25 pts (12.5 pts higher than SNR 50 which awards 12.5 pts)
-    assert score_snr100 == pytest.approx(score_snr50 + 12.5, abs=0.1)
-    # SNR 200 should saturate at same 25 pts as SNR 100
-    assert score_snr200 == pytest.approx(score_snr100, abs=0.01)
+    # Better resolution (smaller d) increases score
+    s_lowres = compute_score(80, 20.0, 3.5, 0)
+    s_hires = compute_score(80, 20.0, 1.5, 0)
+    assert s_hires > s_lowres
 
-    # Multi-lattice frame (num_lattices = 3) should NOT deduct any points vs single lattice
-    score_multi = compute_score(100.0, 3)
-    assert score_multi == pytest.approx(score_snr100, abs=0.01)
+    # Ice contamination penalizes score
+    s_no_ice = compute_score(80, 20.0, 2.0, 0)
+    s_with_ice = compute_score(80, 20.0, 2.0, 2)
+    assert s_no_ice > s_with_ice

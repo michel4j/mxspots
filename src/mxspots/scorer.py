@@ -12,10 +12,9 @@ from .spotfinder import extract_frame_and_params, detect_ice_rings_data
 def score_spots(
     spots: Union[SpotList, List[Spot]],
     params: Optional[SpotParams] = None,
-    percentage_indexed: Optional[float] = None,
-    indexed_spot_count: Optional[int] = None,
-    percentage_regular: Optional[float] = None,
-    regular_spot_count: Optional[int] = None,
+    bragg_spots: Optional[int] = None,
+    bragg_percent: Optional[float] = None,
+    avg_intensity: Optional[float] = None,
     num_lattices: Optional[int] = None,
     ice_score: Optional[float] = None,
     num_ice_rings: Optional[int] = None,
@@ -29,16 +28,16 @@ def score_spots(
     if spot_count == 0:
         return ScoreResult(
             spot_count=0,
+            bragg_spots=0,
+            bragg_percent=0.0,
+            avg_intensity=0.0,
             avg_snr=0.0,
             d_min=999.0,
-            percentage_indexed=None,
-            indexed_spot_count=None,
-            percentage_regular=None,
-            regular_spot_count=None,
-            num_lattices=None,
-            ice_score=ice_score,
-            ice_rings_detected=None,
+            ice_score=ice_score if ice_score is not None else 0.0,
+            num_ice_rings=num_ice_rings if num_ice_rings is not None else 0,
+            num_lattices=0,
             score=0.0,
+            ice_rings_detected=None,
         )
 
     lib = get_lib()
@@ -51,36 +50,37 @@ def score_spots(
         c_spots[i].snr = ctypes.c_float(s.snr)
 
     # If regularity analysis not provided but params given, analyze regularity
-    if percentage_regular is None and params is not None and spot_count >= 5:
+    if bragg_spots is None and params is not None and spot_count >= 5:
         c_params = CMxSpotsParams.from_params(params)
-        c_pct_reg = ctypes.c_float(0.0)
-        c_reg_cnt = ctypes.c_int(0)
+        c_pct_bragg = ctypes.c_float(0.0)
+        c_bragg_cnt = ctypes.c_int(0)
+        c_avg_int = ctypes.c_float(0.0)
         c_n_lat = ctypes.c_int(0)
         try:
             ret_reg = lib.mxspots_analyze_regularity(
                 c_spots,
                 spot_count,
                 ctypes.byref(c_params),
-                ctypes.byref(c_pct_reg),
-                ctypes.byref(c_reg_cnt),
+                ctypes.byref(c_pct_bragg),
+                ctypes.byref(c_bragg_cnt),
+                ctypes.byref(c_avg_int),
                 ctypes.byref(c_n_lat),
             )
             if ret_reg == 0:
-                percentage_regular = float(c_pct_reg.value)
-                regular_spot_count = int(c_reg_cnt.value)
+                bragg_percent = float(c_pct_bragg.value)
+                bragg_spots = int(c_bragg_cnt.value)
+                avg_intensity = float(c_avg_int.value)
                 num_lattices = int(c_n_lat.value)
         except Exception:
             pass
 
     out_score = CMxScoreResult()
-    if percentage_indexed is not None:
-        out_score.percentage_indexed = ctypes.c_float(percentage_indexed)
-    if indexed_spot_count is not None:
-        out_score.indexed_spot_count = ctypes.c_int(indexed_spot_count)
-    if percentage_regular is not None:
-        out_score.percentage_regular = ctypes.c_float(percentage_regular)
-    if regular_spot_count is not None:
-        out_score.regular_spot_count = ctypes.c_int(regular_spot_count)
+    if bragg_spots is not None:
+        out_score.bragg_spots = ctypes.c_int(bragg_spots)
+    if bragg_percent is not None:
+        out_score.bragg_percent = ctypes.c_float(bragg_percent)
+    if avg_intensity is not None:
+        out_score.avg_intensity = ctypes.c_float(avg_intensity)
     if num_lattices is not None:
         out_score.num_lattices = ctypes.c_int(num_lattices)
     if ice_score is not None:
@@ -99,16 +99,16 @@ def score_spots(
 
     return ScoreResult(
         spot_count=int(out_score.spot_count),
+        bragg_spots=int(out_score.bragg_spots),
+        bragg_percent=float(out_score.bragg_percent),
+        avg_intensity=float(out_score.avg_intensity),
         avg_snr=float(out_score.avg_snr),
         d_min=float(out_score.d_min),
-        percentage_indexed=float(out_score.percentage_indexed) if out_score.percentage_indexed > 0.0 else None,
-        indexed_spot_count=int(out_score.indexed_spot_count) if out_score.indexed_spot_count > 0 else None,
-        percentage_regular=float(out_score.percentage_regular) if out_score.percentage_regular > 0.0 else None,
-        regular_spot_count=int(out_score.regular_spot_count) if out_score.regular_spot_count > 0 else None,
-        num_lattices=int(out_score.num_lattices) if out_score.num_lattices > 0 else None,
-        ice_score=ice_score,
-        ice_rings_detected=None,
+        ice_score=ice_score if ice_score is not None else float(out_score.ice_score),
+        num_ice_rings=num_ice_rings if num_ice_rings is not None else int(out_score.num_ice_rings),
+        num_lattices=int(out_score.num_lattices),
         score=float(out_score.score),
+        ice_rings_detected=None,
     )
 
 
@@ -178,16 +178,16 @@ def score_data(
 
     return ScoreResult(
         spot_count=int(out_score.spot_count),
+        bragg_spots=int(out_score.bragg_spots),
+        bragg_percent=float(out_score.bragg_percent),
+        avg_intensity=float(out_score.avg_intensity),
         avg_snr=float(out_score.avg_snr),
         d_min=float(out_score.d_min),
-        percentage_indexed=float(out_score.percentage_indexed) if out_score.percentage_indexed > 0.0 else None,
-        indexed_spot_count=int(out_score.indexed_spot_count) if out_score.indexed_spot_count > 0 else None,
-        percentage_regular=float(out_score.percentage_regular) if out_score.percentage_regular > 0.0 else None,
-        regular_spot_count=int(out_score.regular_spot_count) if out_score.regular_spot_count > 0 else None,
-        num_lattices=int(out_score.num_lattices) if out_score.num_lattices > 0 else None,
-        ice_score=ice_score if ice_score is not None else (float(out_score.ice_score) if out_score.ice_score > 0.0 else None),
-        ice_rings_detected=ice_rings_detected,
+        ice_score=ice_score if ice_score is not None else float(out_score.ice_score),
+        num_ice_rings=int(out_score.num_ice_rings),
+        num_lattices=int(out_score.num_lattices),
         score=float(out_score.score),
+        ice_rings_detected=ice_rings_detected,
     )
 
 

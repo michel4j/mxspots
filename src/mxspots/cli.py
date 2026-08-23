@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 from .spotfinder import findspots
 from .scorer import score
-from .indexer import index
 from .models import SpotParams
 
 
@@ -125,72 +124,16 @@ def score_main():
         print(f"Quality Score for {args.image}:")
         print(f"  Score:              {score_res.score:.1f} / 100")
         print(f"  Spot Count:         {score_res.spot_count}")
-        if score_res.percentage_regular is not None:
-            reg_cnt_str = f" ({score_res.regular_spot_count} spots)" if score_res.regular_spot_count is not None else ""
-            print(f"  Bragg Regularity:   {score_res.percentage_regular:.1f}%{reg_cnt_str}")
-        if score_res.num_lattices is not None and score_res.num_lattices > 0:
+        print(f"  Bragg Spots:        {score_res.bragg_spots}")
+        print(f"  Bragg %:            {score_res.bragg_percent:.1f}%")
+        print(f"  Avg Intensity:      {score_res.avg_intensity:.1f}")
+        if score_res.num_lattices > 0:
             lattice_note = " (Warning: Multi-lattice / split crystal detected)" if score_res.num_lattices > 1 else ""
             print(f"  Lattices Detected:  {score_res.num_lattices}{lattice_note}")
-        if score_res.indexed_spot_count is not None:
-            print(f"  Indexed Spots:      {score_res.indexed_spot_count}")
-        if score_res.percentage_indexed is not None:
-            print(f"  Percentage Indexed: {score_res.percentage_indexed:.1f}%")
         print(f"  Average SNR:        {score_res.avg_snr:.2f}")
         d_min_str = f"{score_res.d_min:.2f} Å (95th percentile)" if score_res.d_min < 900.0 else "N/A"
         print(f"  Resolution Limit:   {d_min_str}")
-        if score_res.ice_score is not None:
+        if score_res.ice_score > 0.0:
             print(f"  Ice Score:          {score_res.ice_score:.2f}")
-        if score_res.ice_rings_detected is not None:
+        if score_res.ice_rings_detected:
             print(f"  Ice Rings Detected: {len(score_res.ice_rings_detected)}")
-
-
-def index_main():
-    parser = argparse.ArgumentParser(
-        prog="mxspots.index",
-        description="Index reciprocal lattice and estimate unit cell from an MX diffraction image",
-    )
-    parser.add_argument("image", help="Path to diffraction image file (.cbf, .h5, .yaml, etc.)")
-    parser.add_argument("--json", action="store_true", help="Output results formatted as JSON")
-    parser.add_argument("--dmin", type=float, default=0.0, help="High-resolution cutoff limit in Angstroms (default: 0.0, unbounded)")
-    parser.add_argument("--dmax", type=float, default=30.0, help="Low-resolution cutoff limit in Angstroms (default: 30.0)")
-    parser.add_argument("--snr", type=float, default=3.0, help="SNR threshold for spot detection (default: 3.0)")
-    parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
-    parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
-    parser.add_argument("--beam-x", type=float, default=0.0, help="Detector beam center X in pixels (0 for auto)")
-    parser.add_argument("--beam-y", type=float, default=0.0, help="Detector beam center Y in pixels (0 for auto)")
-    parser.add_argument("--distance", type=float, default=0.0, help="Detector distance in mm (0 for auto)")
-    parser.add_argument("--wavelength", type=float, default=0.0, help="Wavelength in Angstroms (0 for auto)")
-    parser.add_argument("--no-ice-mask", action="store_true", help="Disable automated ice ring detection and masking")
-    parser.add_argument("--ice-sensitivity", type=float, default=3.0, help="Ice ring detection sensitivity threshold (default: 3.0)")
-
-    args = parser.parse_args()
-
-    params = SpotParams(
-        snr_threshold=args.snr,
-        min_spot_area=args.min_area,
-        max_spot_area=args.max_area,
-        beam_x=args.beam_x,
-        beam_y=args.beam_y,
-        distance=args.distance,
-        wavelength=args.wavelength,
-        d_min=args.dmin,
-        d_max=args.dmax,
-        ice_mask=not args.no_ice_mask,
-        ice_sensitivity=args.ice_sensitivity,
-    )
-
-    try:
-        index_res = index(args.image, params=params)
-    except Exception as e:
-        sys.stderr.write(f"Error: {e}\n")
-        sys.exit(1)
-
-    if args.json:
-        print(index_res.to_json(indent=2))
-    else:
-        a, b, c, alpha, beta, gamma = index_res.unit_cell
-        print(f"Lattice Indexing for {args.image}:")
-        print(f"  Unit Cell:          a={a:.2f} Å, b={b:.2f} Å, c={c:.2f} Å")
-        print(f"                      α={alpha:.1f}°, β={beta:.1f}°, γ={gamma:.1f}°")
-        print(f"  Indexed Spots:      {index_res.indexed_spot_count} / {index_res.total_spot_count}")
-        print(f"  Percentage Indexed: {index_res.percentage_indexed:.1f}%")

@@ -5,7 +5,6 @@ import numpy as np
 from mxspots.models import SpotParams
 from mxspots.spotfinder import findspots, extract_frame_and_params
 from mxspots.scorer import score
-from mxspots.indexer import index
 from mxspots.synthetic import load_synthetic_spec
 
 
@@ -115,16 +114,13 @@ def test_insulin_frame_resolution_filtering(insulin_frame):
         assert s.d_spacing <= 8.0 + 0.1
 
 
-def test_score_and_index_with_resolution_params(test_data_dir):
+def test_score_with_resolution_params(test_data_dir):
     yaml_file = test_data_dir / "clean.yaml"
 
     params = SpotParams(d_min=1.5, d_max=4.0)
     score_res = score(yaml_file, params=params)
     assert score_res.spot_count > 0
     assert score_res.d_min >= 1.5 - 0.1
-
-    index_res = index(yaml_file, params=params)
-    assert index_res.total_spot_count > 0
 
 
 def test_cli_dmin_dmax_flags(test_data_dir, monkeypatch, capsys):
