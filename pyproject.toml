@@ -1,6 +1,6 @@
 [project]
 name = "mxspots"
-dynamic = ["version"]
+version = "2026.8.1"
 description = "Spot Analysis for Assessing Quality of MX Diffraction Frames"
 authors = [
     {name = "Michel Fodje", email = "michel4j@gmail.com"}
@@ -24,11 +24,9 @@ dev = [
 "mxspots.score"     = "mxspots.cli:score_main"
 
 [build-system]
-requires = ["scikit-build-core>=0.10", "setuptools-scm>=8.0"]
+requires = ["scikit-build-core>=0.10"]
 build-backend = "scikit_build_core.build"
 
-[tool.poetry]
-version = "0.1.0"
 
 [tool.scikit-build]
 build.verbose = true
@@ -38,6 +36,3 @@ sdist.include = ["tests/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-
-[tool.dynamic-metadata]
-provider = "scikit_build_core.metadata.setuptools_scm"
