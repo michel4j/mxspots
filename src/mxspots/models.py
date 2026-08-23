@@ -17,7 +17,7 @@ class IceRing:
 
 @dataclass(frozen=True)
 class SpotParams:
-    snr_threshold: float = 3.0
+    snr_threshold: float = 6.0
     min_spot_area: int = 2
     max_spot_area: int = 500
     beam_x: float = 0.0          # px (0.0 for auto/source metadata)
@@ -27,9 +27,9 @@ class SpotParams:
     distance: float = 0.0        # mm (0.0 for auto/source metadata, default 200.0)
     wavelength: float = 0.0      # Angstroms (0.0 for auto/source metadata, default 1.0)
     d_min: float = 0.0           # Angstroms (0.0 for unbounded)
-    d_max: float = 30.0          # Angstroms
+    d_max: float = 20.0          # Angstroms
     ice_mask: bool = True        # Automatically detect and mask ice rings
-    ice_sensitivity: float = 3.0 # Statistical threshold for ice ring detection
+    ice_sensitivity: float = 1.0 # Statistical threshold for ice ring detection
     masked_rings: Optional[List[Tuple[float, float]]] = None  # (d_min, d_max) Angstrom shells to mask
 
 
@@ -92,11 +92,11 @@ class ScoreResult:
     d_min: float
     percentage_indexed: Optional[float] = None
     indexed_spot_count: Optional[int] = None
-    percentage_regular: Optional[float] = None
     regular_spot_count: Optional[int] = None
     num_lattices: Optional[int] = None
     ice_score: Optional[float] = None
     ice_rings_detected: Optional[List[float]] = None
+    percentage_regular: float = 0.0
     score: float = 0.0
 
     def to_dict(self) -> dict:

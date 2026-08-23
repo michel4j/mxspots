@@ -20,7 +20,7 @@ def test_ice_ring_dataclass():
 def test_spot_params_ice_defaults():
     params = SpotParams()
     assert params.ice_mask is True
-    assert params.ice_sensitivity == pytest.approx(3.0)
+    assert params.ice_sensitivity == pytest.approx(1.0)
     assert params.masked_rings is None
 
     custom = SpotParams(ice_mask=False, ice_sensitivity=5.0, masked_rings=[(3.6, 3.7), (3.85, 3.95)])
