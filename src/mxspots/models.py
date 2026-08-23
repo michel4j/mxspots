@@ -9,13 +9,13 @@ class SpotParams:
     snr_threshold: float = 3.0
     min_spot_area: int = 2
     max_spot_area: int = 500
-    beam_x: float = 0.0
-    beam_y: float = 0.0
-    pixel_size_x: float = 0.075  # mm (e.g. standard Eiger pixel size)
-    pixel_size_y: float = 0.075  # mm
-    distance: float = 200.0      # mm
-    wavelength: float = 1.0      # Angstroms
-    d_min: float = 0.0           # Angstroms (0 for unbounded)
+    beam_x: float = 0.0          # px (0.0 for auto/source metadata)
+    beam_y: float = 0.0          # px (0.0 for auto/source metadata)
+    pixel_size_x: float = 0.0    # mm (0.0 for auto/source metadata, default 0.075)
+    pixel_size_y: float = 0.0    # mm (0.0 for auto/source metadata, default 0.075)
+    distance: float = 0.0        # mm (0.0 for auto/source metadata, default 200.0)
+    wavelength: float = 0.0      # Angstroms (0.0 for auto/source metadata, default 1.0)
+    d_min: float = 0.0           # Angstroms (0.0 for unbounded)
     d_max: float = 30.0          # Angstroms
 
 

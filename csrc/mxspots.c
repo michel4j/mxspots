@@ -282,9 +282,15 @@ int mxspots_find_spots_ctx(
         }
     }
 
+    /* Safe geometry parameter fallback defaults */
+    float distance = (params->distance > 0.0f) ? params->distance : 200.0f;
+    float wavelength = (params->wavelength > 0.0f) ? params->wavelength : 1.0f;
+    float pixel_size_x = (params->pixel_size_x > 0.0f) ? params->pixel_size_x : 0.075f;
+    float pixel_size_y = (params->pixel_size_y > 0.0f) ? params->pixel_size_y : 0.075f;
+    float beam_x = params->beam_x;
+    float beam_y = params->beam_y;
+
     /* Compute resolution radial limits */
-    float distance = (params->distance > 0.0f) ? params->distance : 100.0f;
-    float wavelength = params->wavelength;
     float r_min_sq = 0.0f;
     float r_max_sq = 1e30f;
 
@@ -316,11 +322,11 @@ int mxspots_find_spots_ctx(
     for (int y = 0; y < ny; ++y) {
         const float *row = &data[y * nx];
         int8_t *mask_row = &mask[y * nx];
-        float ry = (y - params->beam_y) * params->pixel_size_y;
+        float ry = (y - beam_y) * pixel_size_y;
         float ry2 = ry * ry;
 
         for (int x = 0; x < nx; ++x) {
-            float rx = (x - params->beam_x) * params->pixel_size_x;
+            float rx = (x - beam_x) * pixel_size_x;
             float r2 = rx * rx + ry2;
 
             if (r2 < r_min_sq || r2 > r_max_sq) {
@@ -461,13 +467,13 @@ int mxspots_find_spots_ctx(
                 float cx = (net_I > 0.0) ? (float)(nodes[i].sum_x / net_I) : 0.0f;
                 float cy = (net_I > 0.0) ? (float)(nodes[i].sum_y / net_I) : 0.0f;
 
-                float rx = (cx - params->beam_x) * params->pixel_size_x;
-                float ry = (cy - params->beam_y) * params->pixel_size_y;
+                float rx = (cx - beam_x) * pixel_size_x;
+                float ry = (cy - beam_y) * pixel_size_y;
                 float r = sqrtf(rx * rx + ry * ry);
-                float theta = 0.5f * atan2f(r, (params->distance > 0.0f ? params->distance : 100.0f));
+                float theta = 0.5f * atan2f(r, distance);
                 float sin_theta = sinf(theta);
-                float d = (sin_theta > 1e-6f && params->wavelength > 0.0f)
-                              ? (params->wavelength / (2.0f * sin_theta))
+                float d = (sin_theta > 1e-6f && wavelength > 0.0f)
+                              ? (wavelength / (2.0f * sin_theta))
                               : 999.0f;
 
                 if (params->d_min > 0.0f && d < params->d_min) {
@@ -647,7 +653,7 @@ int mxspots_index_spots(
     }
 
     float wavelength = (params->wavelength > 0.0f) ? params->wavelength : 1.0f;
-    float distance = (params->distance > 0.0f) ? params->distance : 100.0f;
+    float distance = (params->distance > 0.0f) ? params->distance : 200.0f;
     float qx = (params->pixel_size_x > 0.0f) ? params->pixel_size_x : 0.075f;
     float qy = (params->pixel_size_y > 0.0f) ? params->pixel_size_y : 0.075f;
     float bx = params->beam_x;

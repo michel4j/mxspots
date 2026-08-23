@@ -40,8 +40,8 @@ def findspots_main():
             max_spot_area=args.max_area,
             beam_x=args.beam_x,
             beam_y=args.beam_y,
-            distance=args.distance if args.distance > 0 else 200.0,
-            wavelength=args.wavelength if args.wavelength > 0 else 1.0,
+            distance=args.distance,
+            wavelength=args.wavelength,
             d_min=args.dmin,
             d_max=args.dmax,
         )
@@ -104,8 +104,8 @@ def score_main():
             max_spot_area=args.max_area,
             beam_x=args.beam_x,
             beam_y=args.beam_y,
-            distance=args.distance if args.distance > 0 else 200.0,
-            wavelength=args.wavelength if args.wavelength > 0 else 1.0,
+            distance=args.distance,
+            wavelength=args.wavelength,
             d_min=args.dmin,
             d_max=args.dmax,
         )
@@ -157,8 +157,8 @@ def index_main():
             max_spot_area=args.max_area,
             beam_x=args.beam_x,
             beam_y=args.beam_y,
-            distance=args.distance if args.distance > 0 else 200.0,
-            wavelength=args.wavelength if args.wavelength > 0 else 1.0,
+            distance=args.distance,
+            wavelength=args.wavelength,
             d_min=args.dmin,
             d_max=args.dmax,
         )

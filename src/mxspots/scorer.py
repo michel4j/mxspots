@@ -2,11 +2,11 @@ import ctypes
 from pathlib import Path
 from typing import Optional, Union, Any, List
 
-import mxio
 import numpy as np
 from .models import SpotParams, Spot, SpotList, ScoreResult
 from ._lib import get_lib, CMxSpotsParams, CMxSpot, CMxScoreResult
-from .synthetic import SyntheticFrame, generate_synthetic_frame
+from .synthetic import SyntheticFrame
+from .spotfinder import extract_frame_and_params
 
 
 def score_spots(
@@ -107,45 +107,5 @@ def score(
     ImageFrame and DataSet objects, and SyntheticFrame objects.
     :param params: SpotParams object, defaults to None
     """
-
-    if isinstance(image_source, (str, Path)):
-        p = Path(image_source)
-        if p.is_file() and p.suffix.lower() in (".yaml", ".yml"):
-            image_source = generate_synthetic_frame(p)
-        else:
-            image_source = mxio.DataSet.new_from_file(p)
-        if image_source is None:
-            raise ValueError(f"Could not load image source: {p}")
-
-    # SyntheticFrame directly
-    if isinstance(image_source, SyntheticFrame):
-        if params is None:
-            params = SpotParams(
-                beam_x=image_source.cx,
-                beam_y=image_source.cy,
-                pixel_size_x=image_source.qx,
-                pixel_size_y=image_source.qy,
-                distance=image_source.distance,
-                wavelength=image_source.wavelength,
-            )
-        return score_data(image_source.data, params=params)
-
-    # mxio.DataSet directly
-    if isinstance(image_source, mxio.DataSet):
-        image_source = image_source.frame
-
-    # mxio.ImageFrame directly
-    if isinstance(image_source, mxio.ImageFrame):
-        if params is None:
-            params = SpotParams(
-                beam_x=image_source.center.x,
-                beam_y=image_source.center.y,
-                pixel_size_x=image_source.pixel_size.x,
-                pixel_size_y=image_source.pixel_size.y,
-                distance=image_source.distance,
-                wavelength=image_source.wavelength,
-            )
-
-        return score_data(image_source.data, params=params)
-
-    raise TypeError(f"Unsupported image source type: {type(image_source)}")
+    data, merged_params, _ = extract_frame_and_params(image_source, params)
+    return score_data(data, params=merged_params)

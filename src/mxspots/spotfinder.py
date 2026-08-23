@@ -1,6 +1,6 @@
 import ctypes
 from pathlib import Path
-from typing import Optional, Union, Any
+from typing import Optional, Union, Any, Tuple
 import numpy as np
 from .models import SpotParams, Spot, SpotList
 from ._lib import get_lib, CMxSpotsParams, CMxSpot
@@ -39,6 +39,85 @@ class SpotFinderContext:
 
     def __del__(self):
         self.close()
+
+
+def extract_frame_and_params(
+    image_source: Union[str, Path, SyntheticFrame, Any],
+    params: Optional[SpotParams] = None,
+) -> Tuple[np.ndarray, SpotParams, float]:
+    """
+    Extract 2D numpy data array, merged SpotParams with metadata from image_source,
+    and detected frame continuous index (1-based).
+    """
+    detected_index = 1.0
+
+    if isinstance(image_source, (str, Path)):
+        p = Path(image_source)
+        if p.is_file() and p.suffix.lower() in (".yaml", ".yml"):
+            image_source = generate_synthetic_frame(p)
+        else:
+            image_source = mxio.DataSet.new_from_file(p)
+        if image_source is None:
+            raise ValueError(f"Could not load image source: {p}")
+
+    if isinstance(image_source, mxio.DataSet):
+        detected_index = float(image_source.index)
+        image_source = image_source.frame
+
+    if isinstance(image_source, SyntheticFrame):
+        src_bx = float(image_source.cx)
+        src_by = float(image_source.cy)
+        src_qx = float(image_source.qx)
+        src_qy = float(image_source.qy)
+        src_dist = float(image_source.distance)
+        src_wvl = float(image_source.wavelength)
+        data = image_source.data
+    elif isinstance(image_source, mxio.ImageFrame):
+        if image_source.delta_angle > 0:
+            detected_index = (float(image_source.start_angle) / float(image_source.delta_angle)) + 1.0
+        src_bx = float(image_source.center.x)
+        src_by = float(image_source.center.y)
+        src_qx = float(image_source.pixel_size.x)
+        src_qy = float(image_source.pixel_size.y)
+        src_dist = float(image_source.distance)
+        src_wvl = float(image_source.wavelength)
+        data = image_source.data
+    elif hasattr(image_source, "data") and isinstance(image_source.data, np.ndarray):
+        data = image_source.data
+        src_bx = float(getattr(image_source, "cx", 0.0))
+        src_by = float(getattr(image_source, "cy", 0.0))
+        src_qx = float(getattr(image_source, "qx", 0.075))
+        src_qy = float(getattr(image_source, "qy", 0.075))
+        src_dist = float(getattr(image_source, "distance", 200.0))
+        src_wvl = float(getattr(image_source, "wavelength", 1.0))
+    else:
+        raise TypeError(f"Unsupported image source type: {type(image_source)}")
+
+    if params is None:
+        merged_params = SpotParams(
+            beam_x=src_bx,
+            beam_y=src_by,
+            pixel_size_x=src_qx,
+            pixel_size_y=src_qy,
+            distance=src_dist,
+            wavelength=src_wvl,
+        )
+    else:
+        merged_params = SpotParams(
+            snr_threshold=params.snr_threshold,
+            min_spot_area=params.min_spot_area,
+            max_spot_area=params.max_spot_area,
+            beam_x=params.beam_x if params.beam_x != 0.0 else src_bx,
+            beam_y=params.beam_y if params.beam_y != 0.0 else src_by,
+            pixel_size_x=params.pixel_size_x if params.pixel_size_x > 0.0 else src_qx,
+            pixel_size_y=params.pixel_size_y if params.pixel_size_y > 0.0 else src_qy,
+            distance=params.distance if params.distance > 0.0 else src_dist,
+            wavelength=params.wavelength if params.wavelength > 0.0 else src_wvl,
+            d_min=params.d_min,
+            d_max=params.d_max,
+        )
+
+    return data, merged_params, detected_index
 
 
 def findspots_data(
@@ -126,52 +205,8 @@ def findspots(
     :param z: Explicit Z continuous frame coordinate in SPOT.XDS (overrides index).
     :param context: Optional pre-allocated SpotFinderContext for zero-allocation execution.
     """
-    detected_index = 1
-
-    if isinstance(image_source, (str, Path)):
-        p = Path(image_source)
-        if p.is_file() and p.suffix.lower() in (".yaml", ".yml"):
-            image_source = generate_synthetic_frame(p)
-        else:
-            image_source = mxio.DataSet.new_from_file(p)
-        if image_source is None:
-            raise ValueError(f"Could not load image source: {p}")
-
-    # mxio.DataSet directly
-    if isinstance(image_source, mxio.DataSet):
-        detected_index = image_source.index
-        image_source = image_source.frame
-
-    # SyntheticFrame directly
-    if isinstance(image_source, SyntheticFrame):
-        if params is None:
-            params = SpotParams(
-                beam_x=image_source.cx,
-                beam_y=image_source.cy,
-                pixel_size_x=image_source.qx,
-                pixel_size_y=image_source.qy,
-                distance=image_source.distance,
-                wavelength=image_source.wavelength,
-            )
-        detected_index = 1
-        spot_list = findspots_data(image_source.data, params, max_spots=max_spots, context=context)
-
-    # mxio.ImageFrame directly
-    elif isinstance(image_source, mxio.ImageFrame):
-        if params is None:
-            params = SpotParams(
-                beam_x=image_source.center.x,
-                beam_y=image_source.center.y,
-                pixel_size_x=image_source.pixel_size.x,
-                pixel_size_y=image_source.pixel_size.y,
-                distance=image_source.distance,
-                wavelength=image_source.wavelength,
-            )
-        detected_index = (image_source.start_angle / image_source.delta_angle) + 1.0
-        spot_list = findspots_data(image_source.data, params, max_spots=max_spots, context=context)
-
-    else:
-        raise TypeError(f"Unsupported image source type: {type(image_source)}")
+    data, merged_params, detected_index = extract_frame_and_params(image_source, params)
+    spot_list = findspots_data(data, merged_params, max_spots=max_spots, context=context)
 
     if xds_output is not None:
         if z is not None:
