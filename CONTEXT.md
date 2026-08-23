@@ -20,6 +20,14 @@ _Avoid_: C++ runtime, Python extension module
 The process of detecting Bragg spots within a frame array using the Spot Engine according to configured thresholds and background parameters.
 _Avoid_: Peak picking, blob detection
 
+**Detector Geometry**:
+Metadata describing the physical layout of the detector during data collection, including beam center, distance, wavelength, and pixel size, essential for accurate resolution ($d$-spacing) coordinates and correct SPOT.XDS extraction.
+_Avoid_: Detector config, setup parameters
+
+**1D Radial Profile**:
+An azimuthally-integrated projection of the 2D frame plotting average pixel intensity against radial distance from the beam center, used for canonical ice ring detection.
+_Avoid_: Intensity graph, radial binning
+
 **Ice Ring**:
 A concentric powder diffraction ring arising from vitreous/hexagonal water ice crystal contamination at characteristic Bragg $d$-spacings (e.g. 3.90 Å, 3.67 Å, 3.44 Å, 2.25 Å, 2.07 Å, 1.92 Å).
 _Avoid_: Powder ring, background artifact
