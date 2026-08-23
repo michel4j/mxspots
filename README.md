@@ -11,18 +11,16 @@
 - **Fast Multithreaded Spot Finding**: Employs 2D Integral Images (Summed-Area Tables) and OpenMP parallelization for constant-time local background and dispersion estimation, followed by single-pass streaming Connected Component Labeling (CCL).
 - **Automated Ice Ring Detection & Masking**: Performs 1D azimuthal radial integration to detect characteristic powder ice rings (e.g., at 3.90 Å, 3.67 Å, 2.25 Å, 2.07 Å, 1.92 Å) and masks candidate spots falling within contaminated resolution shells.
 - **Reciprocal Difference-Vector Lattice Analysis**: Uses difference-vector recurrence clustering in reciprocal space to classify regular **Bragg spots** from amorphous scatter or noise without requiring reciprocal lattice FFT indexing.
-- **Multi-Lattice & Split Crystal Detection**: Identifies multiple independent crystal lattices present on a single diffraction frame.
-- **Outlier-Resistant Resolution Limit ($d_{95}$)**: Calculates the frame resolution limit bounding 95% of confirmed Bragg reflections, preventing spurious high-angle noise peaks from artificially inflating the diffraction limit.
 - **Hybrid Gated-Logistic Quality Scoring**: Generates a unified, normalized quality score ($0 - 100$) combining Bragg spot count, Bragg fraction, average Bragg intensity, average SNR, resolution limit ($d_{95}$), and ice contamination penalties.
 - **Zero-Allocation Batch Processing**: Pre-allocates reusable execution contexts (`MxSpotsContext`) for scratch buffers during batch grid scans and mesh screening.
-- **XDS Compatibility**: Supports reading and exporting spots directly to `SPOT.XDS` format.
+- **XDS Compatibility**: Supports exporting spots directly to `SPOT.XDS` format.
 
 ---
 
 ## Use Cases
 
 1. **Beamline Rastering & Crystal Screening**: Rapidly evaluate hundreds of grid-scan frames to identify optimal crystal centering and diffraction hotspots.
-2. **Real-Time Data Collection Monitoring**: Compute instant quality scores, resolution limits, and multi-lattice alerts during live rotation data collection.
+2. **Real-Time Data Collection Monitoring**: Compute instant quality scores and resolution limits during live rotation data collection.
 3. **Automated Ice Contamination Flagging**: Detect crystalline water ice rings early and exclude corrupted resolution shells from downstream processing.
 4. **Spot Finding & XDS Export**: Generate filtered spot lists and `SPOT.XDS` coordinate files for downstream data processing pipelines.
 
