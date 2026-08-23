@@ -177,6 +177,292 @@ static int compare_float_asc(const void *a, const void *b) {
     return 0;
 }
 
+typedef struct {
+    float x;
+    float y;
+    float z;
+} Vec3;
+
+static inline float vec3_dot(Vec3 a, Vec3 b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static inline Vec3 vec3_cross(Vec3 a, Vec3 b) {
+    Vec3 c;
+    c.x = a.y * b.z - a.z * b.y;
+    c.y = a.z * b.x - a.x * b.z;
+    c.z = a.x * b.y - a.y * b.x;
+    return c;
+}
+
+static inline float vec3_norm(Vec3 a) {
+    return sqrtf(vec3_dot(a, a));
+}
+
+typedef struct {
+    Vec3 vec;
+    int count;
+} DiffCluster;
+
+static int compare_diff_cluster_desc(const void *a, const void *b) {
+    const DiffCluster *ca = (const DiffCluster *)a;
+    const DiffCluster *cb = (const DiffCluster *)b;
+    if (cb->count > ca->count) return 1;
+    if (cb->count < ca->count) return -1;
+    return 0;
+}
+
+static inline int uf_find(int *parent, int i) {
+    int root = i;
+    while (parent[root] != root) root = parent[root];
+    int curr = i;
+    while (curr != root) {
+        int next = parent[curr];
+        parent[curr] = root;
+        curr = next;
+    }
+    return root;
+}
+
+static inline void uf_union(int *parent, int *size, int i, int j) {
+    int root1 = uf_find(parent, i);
+    int root2 = uf_find(parent, j);
+    if (root1 != root2) {
+        if (size[root1] < size[root2]) {
+            parent[root1] = root2;
+            size[root2] += size[root1];
+        } else {
+            parent[root2] = root1;
+            size[root1] += size[root2];
+        }
+    }
+}
+
+int mxspots_analyze_regularity(
+    const MxSpot *spots,
+    int spot_count,
+    const MxSpotsParams *params,
+    float *out_pct_regular,
+    int *out_reg_count,
+    int *out_num_lattices
+) {
+    if (out_pct_regular != NULL) *out_pct_regular = 0.0f;
+    if (out_reg_count != NULL) *out_reg_count = 0;
+    if (out_num_lattices != NULL) *out_num_lattices = 0;
+
+    if (spots == NULL || spot_count < 5 || params == NULL) {
+        return 0;
+    }
+
+    float wavelength = (params->wavelength > 0.0f) ? params->wavelength : 1.0f;
+    float distance = (params->distance > 0.0f) ? params->distance : 200.0f;
+    float qx = (params->pixel_size_x > 0.0f) ? params->pixel_size_x : 0.075f;
+    float qy = (params->pixel_size_y > 0.0f) ? params->pixel_size_y : 0.075f;
+    float bx = params->beam_x;
+    float by = params->beam_y;
+
+    int n_spots = (spot_count < 2000) ? spot_count : 2000;
+    Vec3 *s_vecs = (Vec3 *)malloc(n_spots * sizeof(Vec3));
+    if (s_vecs == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < n_spots; ++i) {
+        float px = (spots[i].x - bx) * qx;
+        float py = (spots[i].y - by) * qy;
+        float pz = distance;
+        float R = sqrtf(px * px + py * py + pz * pz);
+        s_vecs[i].x = px / (wavelength * R);
+        s_vecs[i].y = py / (wavelength * R);
+        s_vecs[i].z = (pz / R - 1.0f) / wavelength;
+    }
+
+    /* 1. Extract pairwise difference vectors from top spots */
+    int n_diff_spots = (n_spots < 150) ? n_spots : 150;
+    int max_diffs = (n_diff_spots * (n_diff_spots - 1)) / 2;
+    Vec3 *diffs = (Vec3 *)malloc(max_diffs * sizeof(Vec3));
+    if (diffs == NULL) {
+        free(s_vecs);
+        return -1;
+    }
+
+    int num_diffs = 0;
+    for (int i = 0; i < n_diff_spots; ++i) {
+        for (int j = i + 1; j < n_diff_spots; ++j) {
+            Vec3 ds;
+            ds.x = s_vecs[j].x - s_vecs[i].x;
+            ds.y = s_vecs[j].y - s_vecs[i].y;
+            ds.z = s_vecs[j].z - s_vecs[i].z;
+            float norm = vec3_norm(ds);
+            /* Corresponds to real space repeats between ~10 A and ~250 A */
+            if (norm >= 0.004f && norm <= 0.085f) {
+                if (ds.x < 0.0f || (ds.x == 0.0f && ds.y < 0.0f) || (ds.x == 0.0f && ds.y == 0.0f && ds.z < 0.0f)) {
+                    ds.x = -ds.x;
+                    ds.y = -ds.y;
+                    ds.z = -ds.z;
+                }
+                diffs[num_diffs++] = ds;
+            }
+        }
+    }
+
+    if (num_diffs < 3) {
+        free(s_vecs);
+        free(diffs);
+        return 0;
+    }
+
+    /* 2. Count recurrence / density for difference vectors */
+    int *recurrence = (int *)calloc(num_diffs, sizeof(int));
+    if (recurrence == NULL) {
+        free(s_vecs);
+        free(diffs);
+        return -1;
+    }
+
+    float tol_diff = 0.0045f;
+    for (int i = 0; i < num_diffs; ++i) {
+        for (int j = 0; j < num_diffs; ++j) {
+            float dx = diffs[i].x - diffs[j].x;
+            float dy = diffs[i].y - diffs[j].y;
+            float dz = diffs[i].z - diffs[j].z;
+            if (sqrtf(dx*dx + dy*dy + dz*dz) <= tol_diff) {
+                recurrence[i]++;
+            }
+        }
+    }
+
+    /* 3. Extract dominant recurring difference vectors */
+    DiffCluster *clusters = (DiffCluster *)malloc(num_diffs * sizeof(DiffCluster));
+    if (clusters == NULL) {
+        free(s_vecs);
+        free(diffs);
+        free(recurrence);
+        return -1;
+    }
+
+    for (int i = 0; i < num_diffs; ++i) {
+        clusters[i].vec = diffs[i];
+        clusters[i].count = recurrence[i];
+    }
+    free(diffs);
+    free(recurrence);
+
+    qsort(clusters, num_diffs, sizeof(DiffCluster), compare_diff_cluster_desc);
+
+    Vec3 test_vectors[128];
+    int num_test_vectors = 0;
+    int max_test_vectors = 64;
+    int min_recurrence = (n_spots < 150) ? 2 : 3;
+
+    /* Collect top distinct recurring difference vectors */
+    for (int i = 0; i < num_diffs && num_test_vectors < max_test_vectors; ++i) {
+        if (clusters[i].count < min_recurrence) break;
+
+        Vec3 cand = clusters[i].vec;
+        float cand_norm = vec3_norm(cand);
+        if (cand_norm < 1e-4f) continue;
+
+        int duplicate = 0;
+        for (int b = 0; b < num_test_vectors; ++b) {
+            float dx = cand.x - test_vectors[b].x;
+            float dy = cand.y - test_vectors[b].y;
+            float dz = cand.z - test_vectors[b].z;
+            if (sqrtf(dx*dx + dy*dy + dz*dz) < 0.0035f) {
+                duplicate = 1;
+                break;
+            }
+        }
+
+        if (!duplicate) {
+            test_vectors[num_test_vectors++] = cand;
+        }
+    }
+
+    free(clusters);
+
+    if (num_test_vectors == 0) {
+        free(s_vecs);
+        return 0;
+    }
+
+    /* 4. Build spot recurrence adjacency graph using Union-Find */
+    int *uf_parent = (int *)malloc(n_spots * sizeof(int));
+    int *uf_size = (int *)malloc(n_spots * sizeof(int));
+    if (uf_parent == NULL || uf_size == NULL) {
+        free(s_vecs);
+        free(uf_parent);
+        free(uf_size);
+        return -1;
+    }
+
+    for (int i = 0; i < n_spots; ++i) {
+        uf_parent[i] = i;
+        uf_size[i] = 1;
+    }
+
+    float tol_edge = 0.0050f;
+    for (int i = 0; i < n_spots; ++i) {
+        for (int j = i + 1; j < n_spots; ++j) {
+            Vec3 ds;
+            ds.x = s_vecs[j].x - s_vecs[i].x;
+            ds.y = s_vecs[j].y - s_vecs[i].y;
+            ds.z = s_vecs[j].z - s_vecs[i].z;
+
+            int is_edge = 0;
+            for (int b = 0; b < num_test_vectors; ++b) {
+                Vec3 u = test_vectors[b];
+                /* Check +u and -u */
+                float ex1 = ds.x - u.x;
+                float ey1 = ds.y - u.y;
+                float ez1 = ds.z - u.z;
+                if (sqrtf(ex1*ex1 + ey1*ey1 + ez1*ez1) <= tol_edge) {
+                    is_edge = 1;
+                    break;
+                }
+
+                float ex2 = ds.x + u.x;
+                float ey2 = ds.y + u.y;
+                float ez2 = ds.z + u.z;
+                if (sqrtf(ex2*ex2 + ey2*ey2 + ez2*ez2) <= tol_edge) {
+                    is_edge = 1;
+                    break;
+                }
+            }
+
+            if (is_edge) {
+                uf_union(uf_parent, uf_size, i, j);
+            }
+        }
+    }
+
+    /* 5. Connected component extraction and lattice quantification */
+    int regular_spot_count = 0;
+    int num_lattices = 0;
+    int min_comp_size = 5;
+
+    for (int i = 0; i < n_spots; ++i) {
+        if (uf_parent[i] == i) {
+            if (uf_size[i] >= min_comp_size) {
+                num_lattices++;
+                regular_spot_count += uf_size[i];
+            }
+        }
+    }
+
+    float pct_reg = (spot_count > 0) ? (100.0f * (float)regular_spot_count / (float)spot_count) : 0.0f;
+    if (pct_reg > 100.0f) pct_reg = 100.0f;
+
+    if (out_pct_regular != NULL) *out_pct_regular = pct_reg;
+    if (out_reg_count != NULL) *out_reg_count = regular_spot_count;
+    if (out_num_lattices != NULL) *out_num_lattices = num_lattices;
+
+    free(s_vecs);
+    free(uf_parent);
+    free(uf_size);
+    return 0;
+}
+
 MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {
     if (max_nx <= 0 || max_ny <= 0) {
         return NULL;
@@ -304,7 +590,7 @@ int mxspots_find_spots_ctx(
 
     if (wavelength > 0.0f && distance > 0.0f) {
         if (params->d_max > 0.0f) {
-            float s_low = wavelength / (2.0f * params->d_max);\
+            float s_low = wavelength / (2.0f * params->d_max);
             if (s_low > 0.0f && s_low < 1.0f) {
                 float theta_low = asinf(s_low);
                 float r_low = distance * tanf(2.0f * theta_low);
@@ -359,7 +645,7 @@ int mxspots_find_spots_ctx(
             }
 
             float bg, std;
-            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);\
+            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);
 
             float threshold = bg + params->snr_threshold * std;
             if (v > threshold) {
@@ -385,7 +671,7 @@ int mxspots_find_spots_ctx(
 
         while (x < nx) {
             if (mask_row[x] == 1) {
-                int x_start = x;\
+                int x_start = x;
                 while (x < nx && mask_row[x] == 1) {
                     x++;
                 }
@@ -581,6 +867,9 @@ int mxspots_score_spots(
         out_score->indexed_spot_count = 0;
         out_score->ice_score = 0.0f;
         out_score->num_ice_rings = 0;
+        out_score->percentage_regular = 0.0f;
+        out_score->regular_spot_count = 0;
+        out_score->num_lattices = 0;
         out_score->score = 0.0f;
         return 0;
     }
@@ -623,7 +912,10 @@ int mxspots_score_spots(
     if (n_indexed <= 0 && out_score->percentage_indexed > 0.0f) {
         n_indexed = (int)roundf((out_score->percentage_indexed / 100.0f) * (float)spot_count);
     }
-    if (n_indexed <= 0 && out_score->percentage_indexed <= 0.0f) {
+    if (n_indexed <= 0 && out_score->regular_spot_count > 0) {
+        n_indexed = out_score->regular_spot_count;
+    }
+    if (n_indexed <= 0 && out_score->percentage_indexed <= 0.0f && out_score->percentage_regular <= 0.0f) {
         n_indexed = spot_count;
     }
 
@@ -632,8 +924,12 @@ int mxspots_score_spots(
     if (s_spots > 30.0f) s_spots = 30.0f;
     if (s_spots < 0.0f) s_spots = 0.0f;
 
-    /* 2. Percentage indexed term: 0 - 25 pts */
-    float s_index = 25.0f * (out_score->percentage_indexed / 100.0f);
+    /* 2. Percentage regular / indexed term: 0 - 25 pts */
+    float reg_term = out_score->percentage_indexed;
+    if (reg_term <= 0.0f && out_score->percentage_regular > 0.0f) {
+        reg_term = out_score->percentage_regular;
+    }
+    float s_index = 25.0f * (reg_term / 100.0f);
     if (s_index > 25.0f) s_index = 25.0f;
     if (s_index < 0.0f) s_index = 0.0f;
 
@@ -658,7 +954,14 @@ int mxspots_score_spots(
     if (p_ice > 30.0f) p_ice = 30.0f;
     if (p_ice < 0.0f) p_ice = 0.0f;
 
-    float total_score = s_spots + s_index + s_snr + s_res - p_ice;
+    /* 6. Multi-lattice penalty: 0 - 15 pts */
+    float p_multilattice = 0.0f;
+    if (out_score->num_lattices > 1) {
+        p_multilattice = 5.0f * (float)(out_score->num_lattices - 1);
+        if (p_multilattice > 15.0f) p_multilattice = 15.0f;
+    }
+
+    float total_score = s_spots + s_index + s_snr + s_res - p_ice - p_multilattice;
     if (total_score > 100.0f) total_score = 100.0f;
     if (total_score < 0.0f) total_score = 0.0f;
 
@@ -695,7 +998,22 @@ int mxspots_score_frame(
     int spot_count = mxspots_find_spots(data, nx, ny, params, spots, max_spots);
     int actual_count = (spot_count < max_spots) ? spot_count : max_spots;
 
-    /* 3. Reciprocal lattice indexing */
+    /* 3. Regularity analysis */
+    out_score->percentage_regular = 0.0f;
+    out_score->regular_spot_count = 0;
+    out_score->num_lattices = 0;
+    if (actual_count >= 5) {
+        mxspots_analyze_regularity(
+            spots,
+            actual_count,
+            params,
+            &out_score->percentage_regular,
+            &out_score->regular_spot_count,
+            &out_score->num_lattices
+        );
+    }
+
+    /* 4. Reciprocal lattice indexing */
     out_score->percentage_indexed = 0.0f;
     out_score->indexed_spot_count = 0;
     if (actual_count > 0) {
@@ -713,12 +1031,6 @@ int mxspots_score_frame(
 }
 
 typedef struct {
-    float x;
-    float y;
-    float z;
-} Vec3;
-
-typedef struct {
     Vec3 vec;
     float score;
     float length;
@@ -730,22 +1042,6 @@ static int compare_candidate_desc(const void *a, const void *b) {
     if (cb->score > ca->score) return 1;
     if (cb->score < ca->score) return -1;
     return 0;
-}
-
-static inline float vec3_dot(Vec3 a, Vec3 b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-static inline Vec3 vec3_cross(Vec3 a, Vec3 b) {
-    Vec3 c;
-    c.x = a.y * b.z - a.z * b.y;
-    c.y = a.z * b.x - a.x * b.z;
-    c.z = a.x * b.y - a.y * b.x;
-    return c;
-}
-
-static inline float vec3_norm(Vec3 a) {
-    return sqrtf(vec3_dot(a, a));
 }
 
 int mxspots_index_spots(

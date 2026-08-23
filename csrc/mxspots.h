@@ -64,6 +64,9 @@ typedef struct {
     int indexed_spot_count;    /* Number of spots conforming to lattice */
     float ice_score;           /* Ice contamination score */
     int num_ice_rings;         /* Number of detected ice rings */
+    float percentage_regular;  /* Fraction of spots conforming to regular lattice graph */
+    int regular_spot_count;    /* Number of regular spots */
+    int num_lattices;          /* Number of distinct crystal lattices identified */
     float score;               /* Unified composite quality score (0.0 - 100.0) */
 } MxScoreResult;
 
@@ -164,6 +167,18 @@ MXSPOTS_API int mxspots_score_frame(
     int ny,
     const MxSpotsParams *params,
     MxScoreResult *out_score
+);
+
+/**
+ * Analyzes reciprocal difference vector recurrence and extracts lattice graph connected components.
+ */
+MXSPOTS_API int mxspots_analyze_regularity(
+    const MxSpot *spots,
+    int spot_count,
+    const MxSpotsParams *params,
+    float *out_pct_regular,
+    int *out_reg_count,
+    int *out_num_lattices
 );
 
 /**

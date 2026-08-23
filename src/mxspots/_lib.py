@@ -93,6 +93,9 @@ class CMxScoreResult(ctypes.Structure):
         ("indexed_spot_count", ctypes.c_int),
         ("ice_score", ctypes.c_float),
         ("num_ice_rings", ctypes.c_int),
+        ("percentage_regular", ctypes.c_float),
+        ("regular_spot_count", ctypes.c_int),
+        ("num_lattices", ctypes.c_int),
         ("score", ctypes.c_float),
     ]
 
@@ -227,6 +230,17 @@ def get_lib() -> ctypes.CDLL:
         ctypes.POINTER(CMxScoreResult),        # out_score
     ]
     lib.mxspots_score_frame.restype = ctypes.c_int
+
+    # Regularity analysis
+    lib.mxspots_analyze_regularity.argtypes = [
+        ctypes.POINTER(CMxSpot),               # spots
+        ctypes.c_int,                          # spot_count
+        ctypes.POINTER(CMxSpotsParams),        # params
+        ctypes.POINTER(ctypes.c_float),        # out_pct_regular
+        ctypes.POINTER(ctypes.c_int),          # out_reg_count
+        ctypes.POINTER(ctypes.c_int),          # out_num_lattices
+    ]
+    lib.mxspots_analyze_regularity.restype = ctypes.c_int
 
     # Index spots
     lib.mxspots_index_spots.argtypes = [
