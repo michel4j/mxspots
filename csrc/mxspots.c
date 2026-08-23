@@ -245,12 +245,14 @@ int mxspots_analyze_regularity(
     float *out_bragg_percent,
     int *out_bragg_spots,
     float *out_avg_intensity,
-    int *out_num_lattices
+    int *out_num_lattices,
+    float *out_d_min
 ) {
     if (out_bragg_percent != NULL) *out_bragg_percent = 0.0f;
     if (out_bragg_spots != NULL) *out_bragg_spots = 0;
     if (out_avg_intensity != NULL) *out_avg_intensity = 0.0f;
     if (out_num_lattices != NULL) *out_num_lattices = 0;
+    if (out_d_min != NULL) *out_d_min = 999.0f;
 
     if (spots == NULL || spot_count < 5 || params == NULL) {
         return 0;
@@ -444,6 +446,9 @@ int mxspots_analyze_regularity(
     int min_comp_size = 5;
     double sum_bragg_intensity = 0.0;
 
+    float *bragg_d = (float *)malloc(n_spots * sizeof(float));
+    int bragg_d_count = 0;
+
     for (int i = 0; i < n_spots; ++i) {
         if (uf_parent[i] == i) {
             if (uf_size[i] >= min_comp_size) {
@@ -454,6 +459,9 @@ int mxspots_analyze_regularity(
         if (uf_size[root] >= min_comp_size) {
             bragg_spots++;
             sum_bragg_intensity += (double)spots[i].intensity;
+            if (spots[i].d_spacing > 0.0f && spots[i].d_spacing < 900.0f && bragg_d != NULL) {
+                bragg_d[bragg_d_count++] = spots[i].d_spacing;
+            }
         }
     }
 
@@ -462,10 +470,24 @@ int mxspots_analyze_regularity(
 
     float avg_intensity = (bragg_spots > 0) ? (float)(sum_bragg_intensity / (double)bragg_spots) : 0.0f;
 
+    /* Compute 95th percentile resolution limit exclusively from confirmed Bragg spots */
+    float bragg_d_min = 999.0f;
+    if (bragg_d_count > 0 && bragg_d != NULL) {
+        qsort(bragg_d, bragg_d_count, sizeof(float), compare_float_asc);
+        int k = (int)(0.05f * (float)(bragg_d_count - 1));
+        if (k < 0) k = 0;
+        if (k >= bragg_d_count) k = bragg_d_count - 1;
+        bragg_d_min = bragg_d[k];
+    }
+    if (bragg_d != NULL) {
+        free(bragg_d);
+    }
+
     if (out_bragg_percent != NULL) *out_bragg_percent = bragg_percent;
     if (out_bragg_spots != NULL) *out_bragg_spots = bragg_spots;
     if (out_avg_intensity != NULL) *out_avg_intensity = avg_intensity;
     if (out_num_lattices != NULL) *out_num_lattices = num_lattices;
+    if (out_d_min != NULL) *out_d_min = bragg_d_min;
 
     free(s_vecs);
     free(uf_parent);
@@ -600,19 +622,19 @@ int mxspots_find_spots_ctx(
 
     if (wavelength > 0.0f && distance > 0.0f) {
         if (params->d_max > 0.0f) {
-            float s_low = wavelength / (2.0f * params->d_max);
+            float s_low = wavelength / (2.0f * params->d_max);\
             if (s_low > 0.0f && s_low < 1.0f) {
-                float theta_low = asinf(s_low);
-                float r_low = distance * tanf(2.0f * theta_low);
-                r_min_sq = r_low * r_low;
+                float theta_low = asinf(s_low);\
+                float r_low = distance * tanf(2.0f * theta_low);\
+                r_min_sq = r_low * r_low;\
             }
         }
         if (params->d_min > 0.0f) {
-            float s_high = wavelength / (2.0f * params->d_min);
+            float s_high = wavelength / (2.0f * params->d_min);\
             if (s_high > 0.0f && s_high < 1.0f) {
-                float theta_high = asinf(s_high);
-                float r_high = distance * tanf(2.0f * theta_high);
-                r_max_sq = r_high * r_high;
+                float theta_high = asinf(s_high);\
+                float r_high = distance * tanf(2.0f * theta_high);\
+                r_max_sq = r_high * r_high;\
             }
         }
     }
@@ -885,48 +907,49 @@ int mxspots_score_spots(
 
     out_score->spot_count = spot_count;
     double sum_snr = 0.0;
-
-    float *d_spacings = (float *)malloc(spot_count * sizeof(float));
-    int valid_d_count = 0;
-
     for (int i = 0; i < spot_count; ++i) {
         sum_snr += spots[i].snr;
-        if (spots[i].d_spacing > 0.0f && spots[i].d_spacing < 900.0f) {
-            if (d_spacings != NULL) {
-                d_spacings[valid_d_count++] = spots[i].d_spacing;
-            }
-        }
     }
-
     out_score->avg_snr = (float)(sum_snr / spot_count);
 
-    /* Compute 95th percentile resolution limit (where 95% of spots have d >= d_95) */
-    float d_95 = 999.0f;
-    if (valid_d_count > 0 && d_spacings != NULL) {
-        qsort(d_spacings, valid_d_count, sizeof(float), compare_float_asc);
-        /* 5% of highest resolution spots have smallest d-spacings */
-        int k = (int)(0.05f * (float)(valid_d_count - 1));
-        if (k < 0) k = 0;
-        if (k >= valid_d_count) k = valid_d_count - 1;
-        d_95 = d_spacings[k];
-    }
-    if (d_spacings != NULL) {
-        free(d_spacings);
-    }
-
-    out_score->d_min = d_95;
-
-    /* Hybrid Gated-Logistic Scoring (Option C + Resolution Limit) */
     int n_bragg = out_score->bragg_spots;
     if (n_bragg <= 0 && out_score->bragg_percent > 0.0f) {
         n_bragg = (int)roundf((out_score->bragg_percent / 100.0f) * (float)spot_count);
     }
 
-    /* Strict gate: if no Bragg spots, score is 0.0 */
+    /* Strict gate: if no Bragg spots, resolution is unresolved (999.0) and score is 0.0 */
     if (n_bragg <= 0) {
+        out_score->d_min = 999.0f;
         out_score->score = 0.0f;
         return 0;
     }
+
+    /* If d_min was not already provided from regularity analysis (e.g. out_score->d_min <= 0.0f or >= 900.0f), compute from spots */
+    if (out_score->d_min <= 0.0f || out_score->d_min >= 900.0f) {
+        float *d_spacings = (float *)malloc(spot_count * sizeof(float));
+        int valid_d_count = 0;
+        for (int i = 0; i < spot_count; ++i) {
+            if (spots[i].d_spacing > 0.0f && spots[i].d_spacing < 900.0f) {
+                if (d_spacings != NULL) {
+                    d_spacings[valid_d_count++] = spots[i].d_spacing;
+                }
+            }
+        }
+        if (valid_d_count > 0 && d_spacings != NULL) {
+            qsort(d_spacings, valid_d_count, sizeof(float), compare_float_asc);
+            int k = (int)(0.05f * (float)(valid_d_count - 1));
+            if (k < 0) k = 0;
+            if (k >= valid_d_count) k = valid_d_count - 1;
+            out_score->d_min = d_spacings[k];
+        } else {
+            out_score->d_min = 999.0f;
+        }
+        if (d_spacings != NULL) {
+            free(d_spacings);
+        }
+    }
+
+    float d_95 = out_score->d_min;
 
     float p_bragg = (out_score->bragg_percent > 0.0f) ? out_score->bragg_percent : (100.0f * (float)n_bragg / (float)spot_count);
     if (p_bragg > 100.0f) p_bragg = 100.0f;
@@ -949,7 +972,7 @@ int mxspots_score_spots(
 
     float z = -5.5f + 0.85f * logf(1.0f + (float)n_bragg)
                     + 1.20f * (p_bragg / 100.0f)
-                    + 0.45f * logf(1.0f + (i_bragg / 50.0f))
+                    + 0.45f * logf(1.0f + (i_bragg / 50.0f))\
                     + 0.50f * logf(1.0f + snr)
                     + 0.60f * s_res
                     - p_ice;
@@ -996,6 +1019,7 @@ int mxspots_score_frame(
     out_score->bragg_percent = 0.0f;
     out_score->avg_intensity = 0.0f;
     out_score->num_lattices = 0;
+    out_score->d_min = 999.0f;
     if (actual_count >= 5) {
         mxspots_analyze_regularity(
             spots,
@@ -1004,7 +1028,8 @@ int mxspots_score_frame(
             &out_score->bragg_percent,
             &out_score->bragg_spots,
             &out_score->avg_intensity,
-            &out_score->num_lattices
+            &out_score->num_lattices,
+            &out_score->d_min
         );
     }
 

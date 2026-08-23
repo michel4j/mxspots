@@ -17,7 +17,7 @@ def findspots_main():
     parser.add_argument("--xds-file", type=str, default="SPOT.XDS", help="Filename for XDS export (default: SPOT.XDS)")
     parser.add_argument("--index", type=int, default=None, help="Frame index for SPOT.XDS export (calculates z = index - 0.5, default: auto or 1)")
     parser.add_argument("--dmin", type=float, default=0.0, help="High-resolution cutoff limit in Angstroms (default: 0.0, unbounded)")
-    parser.add_argument("--dmax", type=float, default=30.0, help="Low-resolution cutoff limit in Angstroms (default: 30.0)")
+    parser.add_argument("--dmax", type=float, default=20.0, help="Low-resolution cutoff limit in Angstroms (default: 20.0)")
     parser.add_argument("--snr", type=float, default=6.0, help="SNR threshold for spot detection (default: 6.0)")
     parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
     parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
@@ -85,8 +85,8 @@ def score_main():
     parser.add_argument("image", help="Path to diffraction image file (.cbf, .h5, .yaml, etc.)")
     parser.add_argument("--json", action="store_true", help="Output results formatted as JSON")
     parser.add_argument("--dmin", type=float, default=0.0, help="High-resolution cutoff limit in Angstroms (default: 0.0, unbounded)")
-    parser.add_argument("--dmax", type=float, default=30.0, help="Low-resolution cutoff limit in Angstroms (default: 30.0)")
-    parser.add_argument("--snr", type=float, default=3.0, help="SNR threshold for spot detection (default: 3.0)")
+    parser.add_argument("--dmax", type=float, default=20.0, help="Low-resolution cutoff limit in Angstroms (default: 20.0)")
+    parser.add_argument("--snr", type=float, default=6.0, help="SNR threshold for spot detection (default: 6.0)")
     parser.add_argument("--min-area", type=int, default=2, help="Minimum connected pixels per spot (default: 2)")
     parser.add_argument("--max-area", type=int, default=500, help="Maximum connected pixels per spot (default: 500)")
     parser.add_argument("--beam-x", type=float, default=0.0, help="Detector beam center X in pixels (0 for auto)")
@@ -94,7 +94,7 @@ def score_main():
     parser.add_argument("--distance", type=float, default=0.0, help="Detector distance in mm (0 for auto)")
     parser.add_argument("--wavelength", type=float, default=0.0, help="Wavelength in Angstroms (0 for auto)")
     parser.add_argument("--no-ice-mask", action="store_true", help="Disable automated ice ring detection and masking")
-    parser.add_argument("--ice-sensitivity", type=float, default=3.0, help="Ice ring detection sensitivity threshold (default: 3.0)")
+    parser.add_argument("--ice-sensitivity", type=float, default=1.0, help="Ice ring detection sensitivity threshold (default: 1.0)")
 
     args = parser.parse_args()
 

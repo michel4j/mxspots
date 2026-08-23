@@ -230,6 +230,7 @@ def get_lib() -> ctypes.CDLL:
         ctypes.POINTER(ctypes.c_int),          # out_bragg_spots
         ctypes.POINTER(ctypes.c_float),        # out_avg_intensity
         ctypes.POINTER(ctypes.c_int),          # out_num_lattices
+        ctypes.POINTER(ctypes.c_float),        # out_d_min
     ]
     lib.mxspots_analyze_regularity.restype = ctypes.c_int
 

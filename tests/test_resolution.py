@@ -2,9 +2,9 @@ import math
 from pathlib import Path
 import pytest
 import numpy as np
-from mxspots.models import SpotParams
+from mxspots.models import SpotParams, Spot
 from mxspots.spotfinder import findspots, extract_frame_and_params
-from mxspots.scorer import score
+from mxspots.scorer import score, score_spots
 from mxspots.synthetic import load_synthetic_spec
 
 
@@ -153,3 +153,15 @@ def test_cli_dmin_dmax_flags(test_data_dir, monkeypatch, capsys):
             qy=spec.qy,
         )
         assert s["d_spacing"] == pytest.approx(expected_d, abs=0.1)
+
+
+def test_score_resolution_unresolved_when_zero_bragg():
+    spots = [
+        Spot(x=100.0, y=100.0, d_spacing=1.5, intensity=500.0, snr=10.0),
+        Spot(x=200.0, y=200.0, d_spacing=2.0, intensity=400.0, snr=8.0),
+    ]
+    # If 0 bragg spots, d_min must be 999.0 (unresolved) and score 0.0
+    res = score_spots(spots, bragg_spots=0)
+    assert res.bragg_spots == 0
+    assert res.d_min == 999.0
+    assert res.score == 0.0

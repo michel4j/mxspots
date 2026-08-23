@@ -49,6 +49,7 @@ def score_spots(
         c_spots[i].intensity = ctypes.c_float(s.intensity)
         c_spots[i].snr = ctypes.c_float(s.snr)
 
+    reg_d_min = None
     # If regularity analysis not provided but params given, analyze regularity
     if bragg_spots is None and params is not None and spot_count >= 5:
         c_params = CMxSpotsParams.from_params(params)
@@ -56,6 +57,7 @@ def score_spots(
         c_bragg_cnt = ctypes.c_int(0)
         c_avg_int = ctypes.c_float(0.0)
         c_n_lat = ctypes.c_int(0)
+        c_d_min = ctypes.c_float(999.0)
         try:
             ret_reg = lib.mxspots_analyze_regularity(
                 c_spots,
@@ -65,12 +67,14 @@ def score_spots(
                 ctypes.byref(c_bragg_cnt),
                 ctypes.byref(c_avg_int),
                 ctypes.byref(c_n_lat),
+                ctypes.byref(c_d_min),
             )
             if ret_reg == 0:
                 bragg_percent = float(c_pct_bragg.value)
                 bragg_spots = int(c_bragg_cnt.value)
                 avg_intensity = float(c_avg_int.value)
                 num_lattices = int(c_n_lat.value)
+                reg_d_min = float(c_d_min.value)
         except Exception:
             pass
 
@@ -83,6 +87,8 @@ def score_spots(
         out_score.avg_intensity = ctypes.c_float(avg_intensity)
     if num_lattices is not None:
         out_score.num_lattices = ctypes.c_int(num_lattices)
+    if reg_d_min is not None:
+        out_score.d_min = ctypes.c_float(reg_d_min)
     if ice_score is not None:
         out_score.ice_score = ctypes.c_float(ice_score)
     if num_ice_rings is not None:
