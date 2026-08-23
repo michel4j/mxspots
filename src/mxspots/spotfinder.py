@@ -73,8 +73,6 @@ def extract_frame_and_params(
         src_wvl = float(image_source.wavelength)
         data = image_source.data
     elif isinstance(image_source, mxio.ImageFrame):
-        if image_source.delta_angle > 0:
-            detected_index = (float(image_source.start_angle) / float(image_source.delta_angle)) + 1.0
         src_bx = float(image_source.center.x)
         src_by = float(image_source.center.y)
         src_qx = float(image_source.pixel_size.x)
