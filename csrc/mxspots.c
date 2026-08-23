@@ -161,7 +161,7 @@ int mxspots_ping(const MxSpotsParams *params) {
     return 0;
 }
 
-static int compare_spots_desc(const void *a, const void *b) {
+static int compare_spots_desc(const void *a, const void *b) {\
     const MxSpot *sa = (const MxSpot *)a;
     const MxSpot *sb = (const MxSpot *)b;
     if (sb->intensity > sa->intensity) return 1;
@@ -169,7 +169,7 @@ static int compare_spots_desc(const void *a, const void *b) {
     return 0;
 }
 
-MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {
+MxSpotsContext *mxspots_create_context(int max_nx, int max_ny) {\
     if (max_nx <= 0 || max_ny <= 0) {
         return NULL;
     }
@@ -287,8 +287,8 @@ int mxspots_find_spots_ctx(
     float wavelength = (params->wavelength > 0.0f) ? params->wavelength : 1.0f;
     float pixel_size_x = (params->pixel_size_x > 0.0f) ? params->pixel_size_x : 0.075f;
     float pixel_size_y = (params->pixel_size_y > 0.0f) ? params->pixel_size_y : 0.075f;
-    float beam_x = params->beam_x;
-    float beam_y = params->beam_y;
+    float beam_x = (params->beam_x != 0.0f) ? params->beam_x : 0.0f;
+    float beam_y = (params->beam_y != 0.0f) ? params->beam_y : 0.0f;
 
     /* Compute resolution radial limits */
     float r_min_sq = 0.0f;
@@ -339,7 +339,7 @@ int mxspots_find_spots_ctx(
             }
 
             float bg, std;
-            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);
+            sat_query_annulus(&sat, x, y, DEFAULT_BG_HALF_WIDTH, DEFAULT_PEAK_HALF_WIDTH, &bg, &std);\
 
             float threshold = bg + params->snr_threshold * std;
             if (v > threshold) {
@@ -682,7 +682,7 @@ int mxspots_index_spots(
     int n_dirs = 0;
 
     if (dirs == NULL) {
-        free(s_vecs);
+        free(s_vecs);\
         return -2;
     }
 
@@ -923,4 +923,193 @@ int mxspots_index_frame(
     int ret = mxspots_index_spots(spots, actual_count, params, out_index);
     free(spots);
     return ret;
+}
+
+/* Canonical Ice Ih d-spacings in Angstroms */
+static const float CANONICAL_ICE_D_SPACINGS[] = {
+    3.897f, /* (100) */
+    3.669f, /* (002) */
+    3.441f, /* (101) */
+    2.249f, /* (102) */
+    2.071f, /* (110) */
+    1.918f  /* (103) */
+};
+
+int mxspots_detect_ice(
+    const float *data,
+    int nx,
+    int ny,
+    const MxSpotsParams *params,
+    MxIceResult *out_result
+) {
+    if (data == NULL || nx <= 0 || ny <= 0 || params == NULL || out_result == NULL) {
+        return -1;
+    }
+
+    out_result->num_rings = 0;
+    out_result->ice_score = 0.0f;
+
+    float distance = (params->distance > 0.0f) ? params->distance : 200.0f;
+    float wavelength = (params->wavelength > 0.0f) ? params->wavelength : 1.0f;
+    float pixel_size_x = (params->pixel_size_x > 0.0f) ? params->pixel_size_x : 0.075f;
+    float pixel_size_y = (params->pixel_size_y > 0.0f) ? params->pixel_size_y : 0.075f;
+    float beam_x = (params->beam_x != 0.0f) ? params->beam_x : (nx / 2.0f);
+    float beam_y = (params->beam_y != 0.0f) ? params->beam_y : (ny / 2.0f);
+    float sensitivity = (params->snr_threshold > 0.0f) ? params->snr_threshold : 3.0f;
+
+    float q_avg = 0.5f * (pixel_size_x + pixel_size_y);
+    if (q_avg <= 0.0f) q_avg = 0.075f;
+
+    /* Compute maximum pixel radius */
+    float dx0 = beam_x * pixel_size_x;
+    float dx1 = ((float)nx - 1.0f - beam_x) * pixel_size_x;
+    float dy0 = beam_y * pixel_size_y;
+    float dy1 = ((float)ny - 1.0f - beam_y) * pixel_size_y;
+    float max_dx = (dx0 > dx1) ? dx0 : dx1;
+    float max_dy = (dy0 > dy1) ? dy0 : dy1;
+    float max_r_mm = sqrtf(max_dx * max_dx + max_dy * max_dy);
+    float max_r_px = max_r_mm / q_avg;
+    int num_bins = (int)ceilf(max_r_px) + 2;
+    if (num_bins < 100) num_bins = 100;
+
+    double *radial_sum = (double *)calloc(num_bins, sizeof(double));
+    int *radial_count = (int *)calloc(num_bins, sizeof(int));
+    if (radial_sum == NULL || radial_count == NULL) {
+        free(radial_sum);
+        free(radial_count);
+        return -2;
+    }
+
+    #pragma omp parallel
+    {
+        double *t_sum = (double *)calloc(num_bins, sizeof(double));
+        int *t_cnt = (int *)calloc(num_bins, sizeof(int));
+
+        if (t_sum != NULL && t_cnt != NULL) {
+            #pragma omp for schedule(static)
+            for (int y = 0; y < ny; ++y) {
+                const float *row = &data[y * nx];
+                float ry = (y - beam_y) * pixel_size_y;
+                float ry2 = ry * ry;
+
+                for (int x = 0; x < nx; ++x) {
+                    float v = row[x];
+                    if (v <= 0.0f || isnan(v) || isinf(v)) continue;
+
+                    float rx = (x - beam_x) * pixel_size_x;
+                    float r_mm = sqrtf(rx * rx + ry2);
+                    int bin = (int)roundf(r_mm / q_avg);
+                    if (bin >= 0 && bin < num_bins) {
+                        t_sum[bin] += (double)v;
+                        t_cnt[bin] += 1;
+                    }
+                }
+            }
+
+            #pragma omp critical
+            {
+                for (int b = 0; b < num_bins; ++b) {
+                    radial_sum[b] += t_sum[b];
+                    radial_count[b] += t_cnt[b];
+                }
+            }
+        }
+
+        free(t_sum);
+        free(t_cnt);
+    }
+
+    float *radial_mean = (float *)malloc(num_bins * sizeof(float));
+    if (radial_mean == NULL) {
+        free(radial_sum);
+        free(radial_count);
+        return -2;
+    }
+
+    for (int b = 0; b < num_bins; ++b) {
+        radial_mean[b] = (radial_count[b] > 5) ? (float)(radial_sum[b] / radial_count[b]) : 0.0f;
+    }
+
+    int num_canonical = sizeof(CANONICAL_ICE_D_SPACINGS) / sizeof(CANONICAL_ICE_D_SPACINGS[0]);
+    float max_overall_score = 0.0f;
+
+    for (int i = 0; i < num_canonical && out_result->num_rings < MXSPOTS_MAX_MASKED_RINGS; ++i) {
+        float d_ice = CANONICAL_ICE_D_SPACINGS[i];
+        float sin_theta = wavelength / (2.0f * d_ice);
+        if (sin_theta <= 0.0f || sin_theta >= 1.0f) continue;
+
+        float theta = asinf(sin_theta);
+        float r_mm = distance * tanf(2.0f * theta);
+        float r_px = r_mm / q_avg;
+        int b_center = (int)roundf(r_px);
+
+        if (b_center < 10 || b_center >= num_bins - 10) continue;
+
+        /* Calculate local background in annulus around b_center */
+        double bg_sum = 0.0;
+        double bg_sum_sq = 0.0;
+        int bg_cnt = 0;
+
+        for (int b = b_center - 15; b <= b_center + 15; ++b) {
+            if (b < 0 || b >= num_bins) continue;
+            if (b >= b_center - 4 && b <= b_center + 4) continue;
+            if (radial_count[b] > 5) {
+                float val = radial_mean[b];
+                bg_sum += val;
+                bg_sum_sq += val * val;
+                bg_cnt++;
+            }
+        }
+
+        if (bg_cnt < 5) continue;
+
+        double bg_mean = bg_sum / bg_cnt;
+        double var = (bg_sum_sq / bg_cnt) - (bg_mean * bg_mean);
+        double bg_std = (var > 0.0) ? sqrt(var) : 1.0;
+        if (bg_std < 0.1) bg_std = 1.0;
+
+        /* Find peak in range [b_center - 3, b_center + 3] */
+        float peak_val = 0.0f;
+        for (int b = b_center - 3; b <= b_center + 3; ++b) {
+            if (b >= 0 && b < num_bins) {
+                if (radial_mean[b] > peak_val) {
+                    peak_val = radial_mean[b];
+                }
+            }
+        }
+
+        float snr = (float)((peak_val - bg_mean) / bg_std);
+        if (snr > max_overall_score) {
+            max_overall_score = snr;
+        }
+
+        if (snr >= sensitivity) {
+            float delta_r_px = 5.0f;
+            float r_low_mm = (r_px - delta_r_px > 1.0f) ? ((r_px - delta_r_px) * q_avg) : (1.0f * q_avg);
+            float r_high_mm = (r_px + delta_r_px) * q_avg;
+
+            float theta_low = 0.5f * atan2f(r_low_mm, distance);
+            float sin_t_low = sinf(theta_low);
+            float d_max_ring = (sin_t_low > 1e-6f) ? (wavelength / (2.0f * sin_t_low)) : 30.0f;
+
+            float theta_high = 0.5f * atan2f(r_high_mm, distance);
+            float sin_t_high = sinf(theta_high);
+            float d_min_ring = (sin_t_high > 1e-6f) ? (wavelength / (2.0f * sin_t_high)) : 1.0f;
+
+            int ring_idx = out_result->num_rings;
+            out_result->rings[ring_idx].d_spacing = d_ice;
+            out_result->rings[ring_idx].d_min = d_min_ring;
+            out_result->rings[ring_idx].d_max = d_max_ring;
+            out_result->rings[ring_idx].score = snr;
+            out_result->num_rings++;
+        }
+    }
+
+    out_result->ice_score = max_overall_score;
+
+    free(radial_sum);
+    free(radial_count);
+    free(radial_mean);
+
+    return 0;
 }

@@ -1,9 +1,9 @@
 import ctypes
 from pathlib import Path
-from typing import Optional, Union, Any, Tuple
+from typing import Optional, Union, Any, Tuple, List
 import numpy as np
-from .models import SpotParams, Spot, SpotList
-from ._lib import get_lib, CMxSpotsParams, CMxSpot
+from .models import SpotParams, Spot, SpotList, IceRing
+from ._lib import get_lib, CMxSpotsParams, CMxSpot, CMxIceResult
 from .synthetic import SyntheticFrame, generate_synthetic_frame
 
 import mxio
@@ -115,6 +115,9 @@ def extract_frame_and_params(
             wavelength=params.wavelength if params.wavelength > 0.0 else src_wvl,
             d_min=params.d_min,
             d_max=params.d_max,
+            ice_mask=params.ice_mask,
+            ice_sensitivity=params.ice_sensitivity,
+            masked_rings=params.masked_rings,
         )
 
     return data, merged_params, detected_index
@@ -219,3 +222,72 @@ def findspots(
         spot_list.to_xds(xds_output, z=effective_z)
 
     return spot_list
+
+
+def detect_ice_rings_data(
+    data: np.ndarray,
+    params: Optional[SpotParams] = None,
+) -> Tuple[List[IceRing], float]:
+    """
+    Detect azimuthal ice powder rings on a 2D NumPy float32 image array.
+
+    :param data: 2D image data array.
+    :param params: SpotParams containing detector geometry and ice sensitivity.
+    :return: Tuple of (detected IceRing list, overall ice_score).
+    """
+    if params is None:
+        params = SpotParams()
+
+    if not isinstance(data, np.ndarray):
+        data = np.asarray(data, dtype=np.float32)
+    elif data.dtype != np.float32 or not data.flags.c_contiguous:
+        data = np.ascontiguousarray(data, dtype=np.float32)
+
+    if data.ndim != 2:
+        raise ValueError(f"Expected 2D image array, got {data.ndim}D shape {data.shape}")
+
+    ny, nx = data.shape
+    lib = get_lib()
+
+    c_params = CMxSpotsParams.from_params(params)
+    c_params.snr_threshold = ctypes.c_float(params.ice_sensitivity)
+
+    data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    out_result = CMxIceResult()
+
+    lib.mxspots_detect_ice(
+        data_ptr,
+        nx,
+        ny,
+        ctypes.byref(c_params),
+        ctypes.byref(out_result),
+    )
+
+    rings = [
+        IceRing(
+            d_spacing=float(out_result.rings[i].d_spacing),
+            d_min=float(out_result.rings[i].d_min),
+            d_max=float(out_result.rings[i].d_max),
+            score=float(out_result.rings[i].score),
+        )
+        for i in range(out_result.num_rings)
+    ]
+    return rings, float(out_result.ice_score)
+
+
+def detect_ice_rings(
+    image_source: Union[str, Path, SyntheticFrame, Any, np.ndarray],
+    params: Optional[SpotParams] = None,
+) -> Tuple[List[IceRing], float]:
+    """
+    Detect azimuthal ice powder rings on an image frame or raw numpy data.
+
+    :param image_source: Image file path, mxio DataSet/ImageFrame, SyntheticFrame, or 2D numpy array.
+    :param params: SpotParams with detector geometry and ice sensitivity.
+    :return: Tuple of (detected IceRing list, overall ice_score).
+    """
+    if isinstance(image_source, np.ndarray):
+        return detect_ice_rings_data(image_source, params=params)
+
+    data, merged_params, _ = extract_frame_and_params(image_source, params)
+    return detect_ice_rings_data(data, params=merged_params)

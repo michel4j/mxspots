@@ -102,6 +102,23 @@ class CMxIndexResult(ctypes.Structure):
     ]
 
 
+class CMxIceRing(ctypes.Structure):
+    _fields_ = [
+        ("d_spacing", ctypes.c_float),
+        ("d_min", ctypes.c_float),
+        ("d_max", ctypes.c_float),
+        ("score", ctypes.c_float),
+    ]
+
+
+class CMxIceResult(ctypes.Structure):
+    _fields_ = [
+        ("num_rings", ctypes.c_int),
+        ("ice_score", ctypes.c_float),
+        ("rings", CMxIceRing * 16),
+    ]
+
+
 class CMxSpotsContext(ctypes.c_void_p):
     pass
 
@@ -225,6 +242,16 @@ def get_lib() -> ctypes.CDLL:
         ctypes.POINTER(CMxIndexResult),        # out_index
     ]
     lib.mxspots_index_frame.restype = ctypes.c_int
+
+    # Detect ice rings
+    lib.mxspots_detect_ice.argtypes = [
+        ctypes.POINTER(ctypes.c_float),        # data
+        ctypes.c_int,                          # nx
+        ctypes.c_int,                          # ny
+        ctypes.POINTER(CMxSpotsParams),        # params
+        ctypes.POINTER(CMxIceResult),          # out_result
+    ]
+    lib.mxspots_detect_ice.restype = ctypes.c_int
 
     _LIB_CACHE = lib
     return _LIB_CACHE

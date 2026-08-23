@@ -74,6 +74,25 @@ typedef struct {
 } MxIndexResult;
 
 /**
+ * Detected ice ring representation.
+ */
+typedef struct {
+    float d_spacing;           /* Nominal d-spacing in Angstroms */
+    float d_min;               /* High-resolution limit of ring in Angstroms */
+    float d_max;               /* Low-resolution limit of ring in Angstroms */
+    float score;               /* Peak significance SNR */
+} MxIceRing;
+
+/**
+ * Ice detection result summary.
+ */
+typedef struct {
+    int num_rings;             /* Number of detected ice rings */
+    float ice_score;           /* Overall ice contamination score */
+    MxIceRing rings[MXSPOTS_MAX_MASKED_RINGS];
+} MxIceResult;
+
+/**
  * Reusable execution scratch context for zero-allocation batch spot finding.
  */
 typedef struct MxSpotsContext MxSpotsContext;
@@ -162,6 +181,17 @@ MXSPOTS_API int mxspots_index_frame(
     int ny,
     const MxSpotsParams *params,
     MxIndexResult *out_index
+);
+
+/**
+ * Fast 1D azimuthal radial integration and ice ring detection.
+ */
+MXSPOTS_API int mxspots_detect_ice(
+    const float *data,
+    int nx,
+    int ny,
+    const MxSpotsParams *params,
+    MxIceResult *out_result
 );
 
 #ifdef __cplusplus
