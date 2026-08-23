@@ -72,16 +72,6 @@ def score_spots(
         except Exception:
             pass
 
-    # If indexing information not provided but params given, run index_spots
-    if percentage_indexed is None and params is not None and spot_count > 0:
-        from .indexer import index_spots
-        try:
-            idx_res = index_spots(spot_objs, params=params)
-            percentage_indexed = idx_res.percentage_indexed
-            indexed_spot_count = idx_res.indexed_spot_count
-        except Exception:
-            pass
-
     out_score = CMxScoreResult()
     if percentage_indexed is not None:
         out_score.percentage_indexed = ctypes.c_float(percentage_indexed)

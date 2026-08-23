@@ -1,3 +1,3 @@
-# 0014 - Auto-Indexing Integration in Scorer Pipeline
+# 0014 - Decoupled Reciprocal Lattice Indexing from Scorer Pipeline
 
-To provide a comprehensive evaluation of crystal diffraction quality, the `mxspots.score` Python pipeline automatically performs reciprocal space lattice indexing on candidate spots via the Engine's FFT routine. Automatically attempting to index the detected spot list yields an objective `percentage_indexed` rate that heavily weights the final composite quality score, validating whether the detected Bragg regularity corresponds to a physically sound 3D unit cell.
+To maximize frame triage throughput and maintain high-speed scoring, `mxspots.score` evaluates crystal diffraction quality using difference-vector Bragg regularity (`percentage_regular`) without running reciprocal lattice FFT indexing by default. Lattice indexing remains fully available via `mxspots.index` / `index_spots()` when explicit unit cell parameters or indexed spot fractions are required.

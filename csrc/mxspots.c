@@ -1013,17 +1013,9 @@ int mxspots_score_frame(
         );
     }
 
-    /* 4. Reciprocal lattice indexing */
+    /* 4. Reciprocal lattice indexing (omitted by default for fast scoring; defaults to 0.0f) */
     out_score->percentage_indexed = 0.0f;
     out_score->indexed_spot_count = 0;
-    if (actual_count > 0) {
-        MxIndexResult index_res;
-        int idx_ret = mxspots_index_spots(spots, actual_count, params, &index_res);
-        if (idx_ret == 0) {
-            out_score->percentage_indexed = index_res.percentage_indexed;
-            out_score->indexed_spot_count = index_res.indexed_spot_count;
-        }
-    }
 
     int ret = mxspots_score_spots(spots, actual_count, out_score);
     free(spots);

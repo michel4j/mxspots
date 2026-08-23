@@ -18,9 +18,9 @@ def test_score_clean_frame(test_data_dir):
     assert result.d_min < 5.0
     assert result.score > 50.0
     assert result.score <= 100.0
-    assert result.percentage_indexed is not None
-    assert result.indexed_spot_count is not None
-    assert result.indexed_spot_count > 0
+    # Decoupled indexing: percentage_indexed should be None by default in score()
+    assert result.percentage_indexed is None
+    assert result.indexed_spot_count is None
     assert result.percentage_regular is not None
     assert result.percentage_regular > 0.0
     assert result.regular_spot_count is not None
@@ -46,7 +46,7 @@ def test_score_data_empty():
     assert result.num_lattices is None
 
 
-def test_score_spots_auto_indexing():
+def test_score_spots_decoupled_indexing():
     from mxspots.scorer import score_spots
 
     spots = [
@@ -68,8 +68,38 @@ def test_score_spots_auto_indexing():
     assert result.avg_snr == pytest.approx(25.0)
     assert result.d_min == pytest.approx(2.5)
     assert result.score > 0.0
+    assert result.percentage_indexed is None
+    assert result.indexed_spot_count is None
     assert result.percentage_regular is not None
     assert result.num_lattices is not None
+
+
+def test_score_spots_explicit_indexing():
+    from mxspots.scorer import score_spots
+
+    spots = [
+        Spot(x=1500.0 + i * 20.0, y=1500.0 + i * 20.0, d_spacing=2.5, intensity=1000.0, snr=25.0)
+        for i in range(30)
+    ]
+    params = SpotParams(
+        beam_x=1500.0,
+        beam_y=1500.0,
+        pixel_size_x=0.075,
+        pixel_size_y=0.075,
+        distance=200.0,
+        wavelength=1.0,
+    )
+    result = score_spots(
+        spots,
+        params=params,
+        percentage_indexed=85.0,
+        indexed_spot_count=25,
+    )
+
+    assert isinstance(result, ScoreResult)
+    assert result.percentage_indexed == 85.0
+    assert result.indexed_spot_count == 25
+    assert result.score > 0.0
 
 
 def test_score_ice_frame_metrics(test_data_dir):
