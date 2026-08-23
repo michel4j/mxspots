@@ -1,4 +1,5 @@
 import ctypes
+import math
 import os
 import sys
 import sysconfig
@@ -20,10 +21,42 @@ class CMxSpotsParams(ctypes.Structure):
         ("wavelength", ctypes.c_float),
         ("d_min", ctypes.c_float),
         ("d_max", ctypes.c_float),
+        ("num_masked_rings", ctypes.c_int),
+        ("masked_rings_r2", (ctypes.c_float * 2) * 16),
     ]
 
     @classmethod
     def from_params(cls, params: SpotParams) -> "CMxSpotsParams":
+        distance = params.distance if params.distance > 0.0 else 200.0
+        wavelength = params.wavelength if params.wavelength > 0.0 else 1.0
+        masked_r2_arr = ((ctypes.c_float * 2) * 16)()
+        num_rings = 0
+        if params.masked_rings:
+            for d_min_ring, d_max_ring in params.masked_rings[:16]:
+                # d_max corresponds to smaller radius r_min, d_min corresponds to larger radius r_max
+                r_min = 0.0
+                if d_max_ring > 0.0:
+                    arg = wavelength / (2.0 * d_max_ring)
+                    if arg < 1.0:
+                        theta = math.asin(arg)
+                        r_min = distance * math.tan(2.0 * theta)
+                r_max = 0.0
+                if d_min_ring > 0.0:
+                    arg = wavelength / (2.0 * d_min_ring)
+                    if arg < 1.0:
+                        theta = math.asin(arg)
+                        r_max = distance * math.tan(2.0 * theta)
+                    else:
+                        r_max = 1e6
+                else:
+                    r_max = 1e6
+
+                r2_a = r_min * r_min
+                r2_b = r_max * r_max
+                masked_r2_arr[num_rings][0] = ctypes.c_float(min(r2_a, r2_b))
+                masked_r2_arr[num_rings][1] = ctypes.c_float(max(r2_a, r2_b))
+                num_rings += 1
+
         return cls(
             snr_threshold=ctypes.c_float(params.snr_threshold),
             min_spot_area=ctypes.c_int(params.min_spot_area),
@@ -36,6 +69,8 @@ class CMxSpotsParams(ctypes.Structure):
             wavelength=ctypes.c_float(params.wavelength),
             d_min=ctypes.c_float(params.d_min),
             d_max=ctypes.c_float(params.d_max),
+            num_masked_rings=ctypes.c_int(num_rings),
+            masked_rings_r2=masked_r2_arr,
         )
 
 

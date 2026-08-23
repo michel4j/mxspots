@@ -20,6 +20,14 @@ _Avoid_: C++ runtime, Python extension module
 The process of detecting Bragg spots within a frame array using the Spot Engine according to configured thresholds and background parameters.
 _Avoid_: Peak picking, blob detection
 
+**Ice Ring**:
+A concentric powder diffraction ring arising from vitreous/hexagonal water ice crystal contamination at characteristic Bragg $d$-spacings (e.g. 3.90 Å, 3.67 Å, 3.44 Å, 2.25 Å, 2.07 Å, 1.92 Å).
+_Avoid_: Powder ring, background artifact
+
+**Ice Ring Masking**:
+The automatic detection and exclusion of pixels or candidate spots falling within contaminated ice ring resolution shells during spot finding and quality scoring.
+_Avoid_: Ring stripping, peak cutting
+
 **Resolution Limit**:
 The highest resolution (smallest $d$-spacing in Angstroms) at which statistically significant diffraction spots are identified on a frame.
 _Avoid_: Max resolution, high-resolution cutoff
@@ -46,7 +54,7 @@ _Avoid_: Fake frame, mock image
 Command and Python interface for detecting spots on diffraction frames and outputting spot coordinates and intensities.
 
 **mxspots.score**:
-Command and Python interface for computing frame quality metrics including spot count, SNR, and resolution limit.
+Command and Python interface for computing frame quality metrics including spot count, SNR, resolution limit, and ice contamination scores.
 
 **mxspots.index**:
 Command and Python interface for running lattice indexing on detected spots and calculating percentage indexed.

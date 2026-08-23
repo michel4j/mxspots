@@ -21,6 +21,8 @@ extern "C" {
 
 #include <stdint.h>
 
+#define MXSPOTS_MAX_MASKED_RINGS 16
+
 /**
  * Parameters controlling spot detection, resolution range, and detector geometry.
  */
@@ -36,6 +38,8 @@ typedef struct {
     float wavelength;          /* Incident X-ray wavelength in Angstroms */
     float d_min;               /* High-resolution limit in Angstroms (0 = unbounded) */
     float d_max;               /* Low-resolution limit in Angstroms */
+    int num_masked_rings;      /* Number of active masked radial/resolution rings */
+    float masked_rings_r2[MXSPOTS_MAX_MASKED_RINGS][2]; /* [min_r2, max_r2] in mm^2 */
 } MxSpotsParams;
 
 /**

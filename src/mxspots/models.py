@@ -1,7 +1,18 @@
 from dataclasses import dataclass, asdict
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 from pathlib import Path
 import json
+
+
+@dataclass(frozen=True)
+class IceRing:
+    d_spacing: float           # Nominal d-spacing in Angstroms (e.g. 3.897, 3.669)
+    d_min: float               # High-resolution boundary of masked annulus in Angstroms
+    d_max: float               # Low-resolution boundary of masked annulus in Angstroms
+    score: float = 0.0         # Detection significance / peak-to-background ratio
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -17,6 +28,9 @@ class SpotParams:
     wavelength: float = 0.0      # Angstroms (0.0 for auto/source metadata, default 1.0)
     d_min: float = 0.0           # Angstroms (0.0 for unbounded)
     d_max: float = 30.0          # Angstroms
+    ice_mask: bool = True        # Automatically detect and mask ice rings
+    ice_sensitivity: float = 3.0 # Statistical threshold for ice ring detection
+    masked_rings: Optional[List[Tuple[float, float]]] = None  # (d_min, d_max) Angstrom shells to mask
 
 
 @dataclass(frozen=True)
@@ -34,16 +48,20 @@ class Spot:
 @dataclass(frozen=True)
 class SpotList:
     spots: List[Spot]
+    ice_rings: Optional[List[IceRing]] = None
 
     @property
     def count(self) -> int:
         return len(self.spots)
 
     def to_dict(self) -> dict:
-        return {
+        res = {
             "spot_count": self.count,
             "spots": [s.to_dict() for s in self.spots],
         }
+        if self.ice_rings is not None:
+            res["ice_rings"] = [r.to_dict() for r in self.ice_rings]
+        return res
 
     def to_json(self, indent: Optional[int] = None) -> str:
         return json.dumps(self.to_dict(), indent=indent)
@@ -73,6 +91,8 @@ class ScoreResult:
     avg_snr: float
     d_min: float
     percentage_indexed: Optional[float] = None
+    ice_score: Optional[float] = None
+    ice_rings_detected: Optional[List[float]] = None
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -79,6 +79,52 @@ def generate_2d_gaussian(size: tuple[int, int], center: tuple[float, float] | No
     return data
 
 
+def add_powder_ring(
+    frame_data: np.ndarray,
+    cx: float,
+    cy: float,
+    qx: float,
+    qy: float,
+    distance: float,
+    wavelength: float,
+    d_spacing: float,
+    radial_width: float = 2.0,
+    peak_intensity: float = 50.0,
+) -> np.ndarray:
+    """
+    Inject a continuous concentric powder diffraction ring (e.g. ice ring) into frame_data.
+    :param frame_data: 2D numpy array (ny, nx) to modify in-place (and return).
+    :param cx: Beam center X coordinate in pixels.
+    :param cy: Beam center Y coordinate in pixels.
+    :param qx: Pixel size X in mm.
+    :param qy: Pixel size Y in mm.
+    :param distance: Detector distance in mm.
+    :param wavelength: Incident wavelength in Angstroms.
+    :param d_spacing: Ring resolution d-spacing in Angstroms.
+    :param radial_width: Standard deviation width of the ring profile in pixels.
+    :param peak_intensity: Maximum added intensity at the ring center.
+    """
+    theta = math.asin(wavelength / (2.0 * d_spacing))
+    r_mm = distance * math.tan(2.0 * theta)
+
+    ny, nx = frame_data.shape
+    ys = np.arange(ny, dtype=np.float32)
+    xs = np.arange(nx, dtype=np.float32)
+    xx, yy = np.meshgrid(xs, ys)
+
+    rx_mm = (xx - cx) * qx
+    ry_mm = (yy - cy) * qy
+    r_grid_mm = np.sqrt(rx_mm * rx_mm + ry_mm * ry_mm)
+
+    sigma_mm = radial_width * (0.5 * (qx + qy))
+    two_sigma_sq = 2.0 * sigma_mm * sigma_mm
+
+    diff_r = r_grid_mm - r_mm
+    ring_profile = peak_intensity * np.exp(-(diff_r * diff_r) / two_sigma_sq)
+    frame_data += ring_profile.astype(np.float32)
+    return frame_data
+
+
 def generate_synthetic_frame(
     spec_or_path: Union[SyntheticSpec, str, Path],
     max_spots: Optional[int] = None,
@@ -90,7 +136,7 @@ def generate_synthetic_frame(
     """
     Render a 2D synthetic diffraction frame with 2D Gaussian spot profiles.
     Returns a SyntheticFrame containing metadata and the float32 2D NumPy array.
-    :param spec_or_path: Ether a Frame Spec or a path to a yaml file containing the frame spec
+    :param spec_or_path: Either a Frame Spec or a path to a yaml file containing the frame spec
     :param max_spots: Maximum number of spots to render, if not provided, use all spots in frame spec
     :param sigma: Standard deviation of the spot profile
     :param background: Background intensity
