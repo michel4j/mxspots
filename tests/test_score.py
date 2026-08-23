@@ -149,6 +149,8 @@ def test_score_cli_json(test_data_dir, capsys, monkeypatch):
     assert "percentage_regular" in data
     assert "regular_spot_count" in data
     assert "num_lattices" in data
+    assert data["percentage_indexed"] is None
+    assert data["indexed_spot_count"] is None
     assert data["spot_count"] > 0
 
 
@@ -168,6 +170,8 @@ def test_score_cli_text(test_data_dir, capsys, monkeypatch):
     assert "Resolution Limit" in captured.out
     assert "95th percentile" in captured.out
     assert "Bragg Regularity:" in captured.out
+    assert "Percentage Indexed:" not in captured.out
+    assert "Indexed Spots:" not in captured.out
 
 
 def test_score_cli_split_warning(test_data_dir, capsys, monkeypatch):
