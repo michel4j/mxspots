@@ -4,6 +4,9 @@ project(mxspots_c LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+option(PORTABLE_BUILD "Build portable binaries without host-specific microarchitecture flags" ON)
+option(ENABLE_NATIVE_TUNING "Enable -march=native optimizations for the host CPU" OFF)
+
 find_package(OpenMP)
 
 add_library(mxspots SHARED
@@ -19,10 +22,13 @@ if(OpenMP_C_FOUND)
     target_link_libraries(mxspots PRIVATE OpenMP::OpenMP_C)
 endif()
 
-if(NOT MSVC)
-    target_compile_options(mxspots PRIVATE -O3 -march=native)
-else()
+if(MSVC)
     target_compile_options(mxspots PRIVATE /O2)
+else()
+    target_compile_options(mxspots PRIVATE -O3)
+    if(ENABLE_NATIVE_TUNING OR NOT PORTABLE_BUILD)
+        target_compile_options(mxspots PRIVATE -march=native)
+    endif()
 endif()
 
 if (WIN32)
