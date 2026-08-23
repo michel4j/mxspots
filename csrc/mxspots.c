@@ -933,8 +933,8 @@ int mxspots_score_spots(
     if (s_index > 25.0f) s_index = 25.0f;
     if (s_index < 0.0f) s_index = 0.0f;
 
-    /* 3. Average SNR term: 0 - 25 pts */
-    float s_snr = 25.0f * (out_score->avg_snr / 50.0f);
+    /* 3. Average SNR term: 0 - 25 pts (saturates at avg_snr = 100) */
+    float s_snr = 25.0f * (out_score->avg_snr / 100.0f);
     if (s_snr > 25.0f) s_snr = 25.0f;
     if (s_snr < 0.0f) s_snr = 0.0f;
 
@@ -954,14 +954,7 @@ int mxspots_score_spots(
     if (p_ice > 30.0f) p_ice = 30.0f;
     if (p_ice < 0.0f) p_ice = 0.0f;
 
-    /* 6. Multi-lattice penalty: 0 - 15 pts */
-    float p_multilattice = 0.0f;
-    if (out_score->num_lattices > 1) {
-        p_multilattice = 5.0f * (float)(out_score->num_lattices - 1);
-        if (p_multilattice > 15.0f) p_multilattice = 15.0f;
-    }
-
-    float total_score = s_spots + s_index + s_snr + s_res - p_ice - p_multilattice;
+    float total_score = s_spots + s_index + s_snr + s_res - p_ice;
     if (total_score > 100.0f) total_score = 100.0f;
     if (total_score < 0.0f) total_score = 0.0f;
 
