@@ -15,5 +15,5 @@ Implement a Hybrid Gated-Logistic composite scoring function in the C Spot Engin
    - $w_P = 1.20$ (Bragg percentage weight)
    - $w_S = 0.50$ (Signal-to-noise ratio weight)
    - $w_{\text{res}} = 0.60$ (Resolution limit weight)
-   - $s_{\text{res}} = \text{clamp}\left(\frac{4.0 - d_{95}}{4.0 - 1.2}, 0.0, 1.0\right)$
+   - $s_{\text{res}} = \text{clamp}\left(\frac{4.0 - d_{98}}{4.0 - 1.2}, 0.0, 1.0\right)$
    - $P_{\text{ice}} = 0.8 \times N_{\text{ice}} + 0.4 \times \max(0.0, I_{\text{ice}} - 2.0)$

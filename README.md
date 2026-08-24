@@ -11,7 +11,7 @@
 - **Fast Multithreaded Spot Finding**: Employs 2D Integral Images (Summed-Area Tables) and OpenMP parallelization for constant-time local background and dispersion estimation, followed by single-pass streaming Connected Component Labeling (CCL).
 - **Automated Ice Ring Detection & Masking**: Performs 1D azimuthal radial integration to detect characteristic powder ice rings (e.g., at 3.90 Å, 3.67 Å, 2.25 Å, 2.07 Å, 1.92 Å) and masks candidate spots falling within contaminated resolution shells.
 - **Reciprocal Difference-Vector Lattice Analysis**: Uses difference-vector recurrence clustering in reciprocal space to classify regular **Bragg spots** from amorphous scatter or noise without requiring reciprocal lattice FFT indexing.
-- **Hybrid Gated-Logistic Quality Scoring**: Generates a unified, normalized quality score ($0 - 100$) combining Bragg spot count, Bragg fraction, average Bragg intensity, average SNR, resolution limit ($d_{95}$), and ice contamination penalties.
+- **Hybrid Gated-Logistic Quality Scoring**: Generates a unified, normalized quality score ($0 - 100$) combining Bragg spot count, Bragg fraction, average SNR, resolution limit ($d_{98}$), and ice contamination penalties.
 - **Zero-Allocation Batch Processing**: Pre-allocates reusable execution contexts (`MxSpotsContext`) for scratch buffers during batch grid scans and mesh screening.
 - **XDS Compatibility**: Supports exporting spots directly to `SPOT.XDS` format.
 
@@ -50,63 +50,48 @@ When installing from source or building custom binaries:
 git clone https://github.com/michel4j/mxspots.git
 cd mxspots
 
-# Install package with pip (portable build by default)
-pip install .
-
-# For host-optimized build (-march=native)
-pip install . --config-settings=cmake.define.ENABLE_NATIVE_TUNING=ON
-
-# For development (including test dependencies)
+# Install in editable mode with development dependencies
 pip install -e ".[dev]"
 ```
 
 ---
 
-## Command-Line Usage
+## Quick Start & CLI
 
-`mxspots` provides two primary CLI entry points:
+`mxspots` provides command-line tools for rapid diffraction frame analysis:
 
-### 1. `mxspots.findspots`
+### 1. Finding Spots (`mxspots.findspots`)
 
-Finds diffraction spots on an image frame, with optional ice ring detection and `SPOT.XDS` export.
+Find Bragg spots in a single frame and optionally export them to `SPOT.XDS`:
 
 ```bash
 # Basic spot finding
 mxspots.findspots /path/to/frame_00001.cbf
 
-# Export spots formatted as JSON
-mxspots.findspots /path/to/frame_00001.cbf --json
-
-# Export spot coordinates to SPOT.XDS
-mxspots.findspots /path/to/frame_00001.cbf --xds --xds-file SPOT.XDS
-
-# Filter by resolution shells and SNR threshold
-mxspots.findspots /path/to/frame_00001.cbf --snr 6.0 --dmin 1.8 --dmax 20.0
+# Custom SNR threshold, resolution filtering, and XDS export
+mxspots.findspots /path/to/frame_00001.cbf --snr 5.0 --dmin 1.5 --dmax 20.0 --xds
 ```
 
-#### CLI Options
-- `image`: Path to diffraction image (`.cbf`, `.h5`, `.yaml`, etc.).
-- `--snr`: Signal-to-noise ratio threshold (default: `6.0`).
-- `--dmin`: High-resolution cutoff in Å (default: `0.0`, unbounded).
-- `--dmax`: Low-resolution cutoff in Å (default: `20.0`).
-- `--min-area`, `--max-area`: Minimum and maximum spot pixel areas (default: `2`, `500`).
-- `--max-spots`: Maximum number of spots to return (default: `5000`).
-- `--no-ice-mask`: Disable automated ice ring detection and masking.
-- `--ice-sensitivity`: Ice ring detection threshold (default: `1.0`).
-- `--xds`, `--xds-file`: Export spots to XDS format.
-- `--json`: Output results formatted as JSON.
+#### Example Output
+```text
+Found 342 spots in /path/to/frame_00001.cbf:
+Index  X (px)     Y (px)     d (Å)      Intensity    SNR     
+------------------------------------------------------------
+1      1248.50    1312.20    2.45       5420.0       42.3    
+2      1105.10    1480.00    2.12       4980.0       38.7    
+3      1380.25    1150.80    2.80       4320.0       35.1    
+... and 322 more spots.
+```
 
----
+### 2. Quality Scoring (`mxspots.score`)
 
-### 2. `mxspots.score`
-
-Computes composite quality scores, Bragg metrics, lattice counts, and resolution limits.
+Compute composite quality score, Bragg spot metrics, resolution limit, and ice ring diagnostics:
 
 ```bash
-# Assess diffraction frame quality
+# Output formatted summary
 mxspots.score /path/to/frame_00001.cbf
 
-# Output score metrics as JSON
+# Output detailed JSON for automated beamline pipelines
 mxspots.score /path/to/frame_00001.cbf --json
 ```
 
@@ -120,7 +105,7 @@ Quality Score for /path/to/frame_00001.cbf:
   Avg Intensity:      1420.5
   Lattices Detected:  1
   Average SNR:        14.22
-  Resolution Limit:   1.75 Å (95th percentile)
+  Resolution Limit:   1.75 Å (98th percentile)
   Ice Score:          0.00
 ```
 
@@ -214,10 +199,9 @@ $$\text{Score} = \begin{cases} 0.0 & \text{if } N_{\text{bragg}} = 0 \\ \text{cl
 
 where the logit $z$ is computed from:
 - **Bragg Spot Count ($N_{\text{bragg}}$)**: Logarithmic scaling $\ln(1 + N_{\text{bragg}})$
-- **Bragg Spot Fraction ($P_{\\text{bragg}}$)**: Linear weighting of lattice conformity
-- **Average Bragg Intensity ($I_{\text{bragg}}$)**: Logarithmic intensity scaling $\ln(1 + I_{\text{bragg}} / 50)$
+- **Bragg Spot Fraction ($P_{\text{bragg}}$)**: Linear weighting of lattice conformity
 - **Signal-to-Noise Ratio ($\text{SNR}$)**: Logarithmic peak quality $\ln(1 + \text{SNR})$
-- **Bragg Resolution Limit ($d_{95}$)**: Linear scaling between $4.0\,\text{Å}$ and $1.2\,\text{Å}$
+- **Bragg Resolution Limit ($d_{98}$)**: Linear scaling between $4.0\,\text{Å}$ and $1.2\,\text{Å}$
 - **Ice Penalties ($P_{\text{ice}}$)**: Penalty based on number of ice rings and contamination significance
 
 ---

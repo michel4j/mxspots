@@ -131,7 +131,7 @@ def score_main():
             lattice_note = " (Warning: Multi-lattice / split crystal detected)" if score_res.num_lattices > 1 else ""
             print(f"  Lattices Detected:  {score_res.num_lattices}{lattice_note}")
         print(f"  Average SNR:        {score_res.avg_snr:.2f}")
-        d_min_str = f"{score_res.d_min:.2f} Å (95th percentile)" if score_res.d_min < 900.0 else "N/A"
+        d_min_str = f"{score_res.d_min:.2f} Å (98th percentile)" if score_res.d_min < 900.0 else "N/A"
         print(f"  Resolution Limit:   {d_min_str}")
         if score_res.ice_score > 0.0:
             print(f"  Ice Score:          {score_res.ice_score:.2f}")

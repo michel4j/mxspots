@@ -6,7 +6,7 @@ from mxspots._lib import get_lib, CMxSpotsParams, CMxSpot, CMxScoreResult
 from mxspots.models import SpotParams
 
 
-def test_c_mxspots_score_spots_95th_percentile():
+def test_c_mxspots_score_spots_98th_percentile():
     lib = get_lib()
 
     # Create 100 spots with controlled d-spacings:
@@ -41,9 +41,8 @@ def test_c_mxspots_score_spots_95th_percentile():
     ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_score))
     assert ret == 0
 
-    # Raw minimum is 1.0 A, but 95th percentile (where 95% have d >= d_95) should be ~2.0 A (at index k = floor(0.05 * 99) = 4, so d ~ 1.4 to 2.0 A)
-    assert out_score.d_min > 1.3
-    assert out_score.d_min <= 2.05
+    # Raw minimum is 1.0 A, 98th percentile (where 98% have d >= d_98) should be 1.1 A (at index k = floor(0.02 * 99) = 1)
+    assert out_score.d_min == pytest.approx(1.1, rel=1e-3)
     assert out_score.score > 60.0
     assert out_score.score <= 100.0
 

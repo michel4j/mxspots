@@ -1,5 +1,7 @@
 # 0011 - 95th Percentile Resolution Limit
 
+> **Status**: Superseded by [0019 - 98th Percentile Resolution Limit](0019-98th-percentile-resolution-limit.md)
+
 To ensure robust evaluation of frame diffraction resolution limits, `mxspots` uses a $d_{95}$ metric computed strictly over confirmed Bragg reflections (spots belonging to regular lattice recurrence components with $\ge 5$ members) rather than all detected spots or the absolute single highest-resolution spot.
 
 This outlier-resistant approach guarantees:
