@@ -964,18 +964,24 @@ int mxspots_score_spots(
         if (s_res < 0.0f) s_res = 0.0f;
     }
 
-    float p_ice = 0.8f * (float)out_score->num_ice_rings;
-    if (out_score->ice_score > 2.0f) {
-        p_ice += 0.4f * (out_score->ice_score - 2.0f);
-    }
-
     float z = -5.5f + 0.85f * logf(1.0f + (float)n_bragg)
                     + 1.20f * (p_bragg / 100.0f)
                     + 0.50f * logf(1.0f + snr)
-                    + 0.60f * s_res
-                    - p_ice;
+                    + 0.60f * s_res;
 
-    float score = 100.0f / (1.0f + expf(-z));
+    float raw_score = 100.0f / (1.0f + expf(-z));
+    if (raw_score > 100.0f) raw_score = 100.0f;
+    if (raw_score < 0.0f) raw_score = 0.0f;
+
+    /* Ice penalty: capped at at most 10 points (10% score reduction) */
+    float p_ice = 2.0f * (float)out_score->num_ice_rings;
+    if (out_score->ice_score > 2.0f) {
+        p_ice += 1.0f * (out_score->ice_score - 2.0f);
+    }
+    if (p_ice > 10.0f) p_ice = 10.0f;
+    if (p_ice < 0.0f) p_ice = 0.0f;
+
+    float score = raw_score - p_ice;
     if (score > 100.0f) score = 100.0f;
     if (score < 0.0f) score = 0.0f;
 

@@ -195,14 +195,14 @@ print(f"Score: {res.score:.1f}")
 
 The Composite Quality Score ($S \in [0, 100]$) uses a **Hybrid Gated-Logistic** model:
 
-$$\text{Score} = \begin{cases} 0.0 & \text{if } N_{\text{bragg}} = 0 \\ \text{clamp}\left(\frac{100}{1 + e^{-z}}, 0, 100\right) & \text{if } N_{\text{bragg}} > 0 \end{cases}$$
+$$\text{Score} = \begin{cases} 0.0 & \text{if } N_{\text{bragg}} = 0 \\ \text{clamp}\left(\frac{100}{1 + e^{-z}} - P_{\text{ice}}, 0, 100\right) & \text{if } N_{\text{bragg}} > 0 \end{cases}$$
 
 where the logit $z$ is computed from:
 - **Bragg Spot Count ($N_{\text{bragg}}$)**: Logarithmic scaling $\ln(1 + N_{\text{bragg}})$
 - **Bragg Spot Fraction ($P_{\text{bragg}}$)**: Linear weighting of lattice conformity
 - **Signal-to-Noise Ratio ($\text{SNR}$)**: Logarithmic peak quality $\ln(1 + \text{SNR})$
 - **Bragg Resolution Limit ($d_{98}$)**: Linear scaling between $4.0\,\text{Å}$ and $1.2\,\text{Å}$
-- **Ice Penalties ($P_{\text{ice}}$)**: Penalty based on number of ice rings and contamination significance
+- **Ice Penalties ($P_{\text{ice}}$)**: Post-logistic penalty capped at at most 10 points ($P_{\text{ice}} \in [0, 10]$) based on detected ice ring count and contamination severity
 
 ---
 

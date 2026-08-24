@@ -175,3 +175,53 @@ def test_c_mxspots_score_intensity_weight_removed():
     assert ret2 == 0
 
     assert out1.score == pytest.approx(out2.score, rel=1e-5)
+
+
+def test_c_mxspots_score_ice_penalty_capped_at_10_points():
+    """Verify that ice penalty reduces score by at most 10 points even with extreme ice contamination."""
+    lib = get_lib()
+    n_spots = 100
+    c_spots = (CMxSpot * n_spots)()
+    for i in range(n_spots):
+        c_spots[i].x = float(100 + i)
+        c_spots[i].y = float(100 + i)
+        c_spots[i].d_spacing = 1.8
+        c_spots[i].intensity = 2000.0
+        c_spots[i].snr = 30.0
+
+    # Base score with 0 ice
+    out_no_ice = CMxScoreResult()
+    out_no_ice.bragg_spots = 90
+    out_no_ice.bragg_percent = 90.0
+    out_no_ice.avg_intensity = 2000.0
+    out_no_ice.num_ice_rings = 0
+    out_no_ice.ice_score = 0.0
+    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_no_ice))
+    assert ret == 0
+    base_score = out_no_ice.score
+
+    # Maximum ice (e.g. 6 ice rings, ice_score = 50.0)
+    out_max_ice = CMxScoreResult()
+    out_max_ice.bragg_spots = 90
+    out_max_ice.bragg_percent = 90.0
+    out_max_ice.avg_intensity = 2000.0
+    out_max_ice.num_ice_rings = 6
+    out_max_ice.ice_score = 50.0
+    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_max_ice))
+    assert ret == 0
+    max_ice_score = out_max_ice.score
+
+    # Difference must be exactly 10.0 points
+    assert base_score - max_ice_score == pytest.approx(10.0, abs=1e-4)
+
+    # Moderate ice (1 ring, ice_score = 3.0) -> p_ice = 2.0*1 + 1.0*(3.0-2.0) = 3.0 points
+    out_mod_ice = CMxScoreResult()
+    out_mod_ice.bragg_spots = 90
+    out_mod_ice.bragg_percent = 90.0
+    out_mod_ice.avg_intensity = 2000.0
+    out_mod_ice.num_ice_rings = 1
+    out_mod_ice.ice_score = 3.0
+    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_mod_ice))
+    assert ret == 0
+
+    assert base_score - out_mod_ice.score == pytest.approx(3.0, abs=1e-4)
