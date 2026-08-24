@@ -78,6 +78,21 @@ def generate_2d_gaussian(size: tuple[int, int], center: tuple[float, float] | No
     data = np.exp(-squared_distance / (2.0 * sigma ** 2))
     return data
 
+def add_masked_region(
+    frame_data: np.ndarray,
+    x_min: int,
+    x_max: int,
+    y_min: int,
+    y_max: int,
+    mask_val: float = -1.0,
+) -> np.ndarray:
+    """
+    Inject a rectangular masked region into the frame setting values to mask_val.
+    """
+    frame_data[y_min:y_max, x_min:x_max] = mask_val
+    return frame_data
+
+
 
 def add_powder_ring(
     frame_data: np.ndarray,
