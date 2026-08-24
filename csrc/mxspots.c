@@ -955,7 +955,6 @@ int mxspots_score_spots(
     if (p_bragg > 100.0f) p_bragg = 100.0f;
     if (p_bragg < 0.0f) p_bragg = 0.0f;
 
-    float i_bragg = (out_score->avg_intensity > 0.0f) ? out_score->avg_intensity : 0.0f;
     float snr = (out_score->avg_snr > 0.0f) ? out_score->avg_snr : 0.0f;
 
     float s_res = 0.0f;
@@ -972,7 +971,6 @@ int mxspots_score_spots(
 
     float z = -5.5f + 0.85f * logf(1.0f + (float)n_bragg)
                     + 1.20f * (p_bragg / 100.0f)
-                    + 0.45f * logf(1.0f + (i_bragg / 50.0f))\
                     + 0.50f * logf(1.0f + snr)
                     + 0.60f * s_res
                     - p_ice;

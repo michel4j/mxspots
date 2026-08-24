@@ -147,3 +147,32 @@ def test_c_mxspots_score_logistic_monotonicity():
     s_no_ice = compute_score(80, 20.0, 2.0, 0)
     s_with_ice = compute_score(80, 20.0, 2.0, 2)
     assert s_no_ice > s_with_ice
+
+
+def test_c_mxspots_score_intensity_weight_removed():
+    """Verify that Bragg average intensity alone does not affect score when SNR and counts are identical."""
+    lib = get_lib()
+    n_spots = 50
+    c_spots = (CMxSpot * n_spots)()
+    for i in range(n_spots):
+        c_spots[i].x = float(100 + i)
+        c_spots[i].y = float(100 + i)
+        c_spots[i].d_spacing = 2.0
+        c_spots[i].intensity = 500.0
+        c_spots[i].snr = 10.0
+
+    out1 = CMxScoreResult()
+    out1.bragg_spots = 40
+    out1.bragg_percent = 80.0
+    out1.avg_intensity = 100.0
+    ret1 = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out1))
+    assert ret1 == 0
+
+    out2 = CMxScoreResult()
+    out2.bragg_spots = 40
+    out2.bragg_percent = 80.0
+    out2.avg_intensity = 50000.0
+    ret2 = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out2))
+    assert ret2 == 0
+
+    assert out1.score == pytest.approx(out2.score, rel=1e-5)
