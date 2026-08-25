@@ -26,5 +26,5 @@ podman run --rm \
 
 echo "🧹 Cleaning up temporary build artifacts..."
 rm -rf "$UNREPAIRED_DIR" *.egg-info build/
-
-echo "✅ Success! Your PyPI-compliant wheel is ready in the '$DIST_DIR/' directory."
+poetry build --format sdist
+echo "✅ Success! Your PyPI-compliant files is ready in the '$DIST_DIR/' directory."
