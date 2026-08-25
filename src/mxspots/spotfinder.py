@@ -206,6 +206,27 @@ def findspots_data(
         for i in range(actual_count)
     ]
 
+    # Post-mask validation: ensure no spots survive within any detected or user-specified ice shell
+    if (params.masked_rings or detected_ice_rings) and spots:
+        active_shells = []
+        if params.masked_rings:
+            active_shells.extend(params.masked_rings)
+        if detected_ice_rings:
+            active_shells.extend([(r.d_min, r.d_max) for r in detected_ice_rings])
+
+        validated_spots = []
+        for s in spots:
+            inside = False
+            for d_min_ring, d_max_ring in active_shells:
+                low_d = min(d_min_ring, d_max_ring)
+                high_d = max(d_min_ring, d_max_ring)
+                if low_d <= s.d_spacing <= high_d:
+                    inside = True
+                    break
+            if not inside:
+                validated_spots.append(s)
+        spots = validated_spots
+
     return SpotList(spots=spots, ice_rings=detected_ice_rings)
 
 

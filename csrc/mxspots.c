@@ -1016,14 +1016,50 @@ int mxspots_score_frame(
     out_score->ice_score = ice_res.ice_score;
     out_score->num_ice_rings = ice_res.num_rings;
 
-    /* 2. Spot finding */
+    /* Merge detected ice rings into effective params */
+    MxSpotsParams effective_params = *params;
+    if (ice_res.num_rings > 0) {
+        float distance = (params->distance > 0.0f) ? params->distance : 200.0f;
+        float wavelength = (params->wavelength > 0.0f) ? params->wavelength : 1.0f;
+
+        for (int r = 0; r < ice_res.num_rings && effective_params.num_masked_rings < MXSPOTS_MAX_MASKED_RINGS; ++r) {
+            float d_min_r = ice_res.rings[r].d_min;
+            float d_max_r = ice_res.rings[r].d_max;
+
+            float r_min = 0.0f;
+            if (d_max_r > 0.0f) {
+                float arg = wavelength / (2.0f * d_max_r);
+                if (arg < 1.0f) {
+                    float theta = asinf(arg);
+                    r_min = distance * tanf(2.0f * theta);
+                }
+            }
+            float r_max = 1e6f;
+            if (d_min_r > 0.0f) {
+                float arg = wavelength / (2.0f * d_min_r);
+                if (arg < 1.0f) {
+                    float theta = asinf(arg);
+                    r_max = distance * tanf(2.0f * theta);
+                }
+            }
+
+            float r2_a = r_min * r_min;
+            float r2_b = r_max * r_max;
+            int idx = effective_params.num_masked_rings;
+            effective_params.masked_rings_r2[idx][0] = (r2_a < r2_b) ? r2_a : r2_b;
+            effective_params.masked_rings_r2[idx][1] = (r2_a > r2_b) ? r2_a : r2_b;
+            effective_params.num_masked_rings++;
+        }
+    }
+
+    /* 2. Spot finding with effective masked params */
     int max_spots = 50000;
     MxSpot *spots = (MxSpot *)malloc(max_spots * sizeof(MxSpot));
     if (spots == NULL) {
         return -2;
     }
 
-    int spot_count = mxspots_find_spots(data, nx, ny, params, spots, max_spots);
+    int spot_count = mxspots_find_spots(data, nx, ny, &effective_params, spots, max_spots);
     int actual_count = (spot_count < max_spots) ? spot_count : max_spots;
 
     /* 3. Regularity analysis */
@@ -1037,7 +1073,7 @@ int mxspots_score_frame(
         mxspots_analyze_regularity(
             spots,
             actual_count,
-            params,
+            &effective_params,
             &out_score->bragg_percent,
             &out_score->bragg_spots,
             &out_score->avg_intensity,

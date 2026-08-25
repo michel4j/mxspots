@@ -144,3 +144,108 @@ def test_score_cli_ice_mask_flags(test_data_dir, monkeypatch, capsys):
     assert "ice_score" in data
     assert "ice_rings_detected" in data
     assert data["ice_score"] > 0.0
+
+def test_post_mask_validation_no_spots_in_detected_shells():
+    rng = np.random.default_rng(77)
+    ny, nx = 1024, 1024
+    cx, cy = 512.0, 512.0
+    qx, qy = 0.075, 0.075
+    distance = 150.0
+    wavelength = 1.0
+
+    data = rng.normal(loc=10.0, scale=2.0, size=(ny, nx)).astype(np.float32)
+
+    # Add powder ring at 3.897 A
+    add_powder_ring(
+        data,
+        cx=cx,
+        cy=cy,
+        qx=qx,
+        qy=qy,
+        distance=distance,
+        wavelength=wavelength,
+        d_spacing=3.897,
+        radial_width=3.0,
+        peak_intensity=60.0,
+    )
+
+    # Add powder ring at 3.669 A
+    add_powder_ring(
+        data,
+        cx=cx,
+        cy=cy,
+        qx=qx,
+        qy=qy,
+        distance=distance,
+        wavelength=wavelength,
+        d_spacing=3.669,
+        radial_width=3.0,
+        peak_intensity=50.0,
+    )
+
+    # Add spots across various radii
+    for radius_px in [100, 200, 260, 275, 400]:
+        x = int(cx + radius_px)
+        y = int(cy)
+        data[y-1:y+2, x-1:x+2] += 500.0
+
+    params = SpotParams(
+        beam_x=cx,
+        beam_y=cy,
+        pixel_size_x=qx,
+        pixel_size_y=qy,
+        distance=distance,
+        wavelength=wavelength,
+        ice_mask=True,
+        ice_sensitivity=2.5,
+    )
+
+    spot_list = findspots_data(data, params=params)
+    assert spot_list.ice_rings is not None
+    assert len(spot_list.ice_rings) >= 2
+
+    # Post-mask validation verification: no detected spot may lie inside any detected ice ring shell
+    for spot in spot_list.spots:
+        for ring in spot_list.ice_rings:
+            assert not (ring.d_min <= spot.d_spacing <= ring.d_max), (
+                f"Spot at d={spot.d_spacing:.3f} survived inside detected ice ring [{ring.d_min:.3f}, {ring.d_max:.3f}]"
+            )
+
+
+def test_post_mask_validation_explicit_masked_rings():
+    rng = np.random.default_rng(88)
+    ny, nx = 1024, 1024
+    cx, cy = 512.0, 512.0
+    qx, qy = 0.075, 0.075
+    distance = 200.0
+    wavelength = 1.0
+
+    data = rng.normal(loc=10.0, scale=2.0, size=(ny, nx)).astype(np.float32)
+
+    # At distance=200, lambda=1.0:
+    # d = 3.0 A -> 2*theta = 2*asin(1/(2*3)) = 19.19 deg -> r_mm = 200*tan(19.19) = 69.63 mm -> r_px = 928 px
+    # d = 5.0 A -> 2*theta = 2*asin(1/(2*5)) = 11.48 deg -> r_mm = 200*tan(11.48) = 40.61 mm -> r_px = 541 px
+    # d = 10.0 A -> 2*theta = 2*asin(1/(2*10)) = 5.73 deg -> r_mm = 200*tan(5.73) = 20.06 mm -> r_px = 267 px
+
+    # Inject spots at ~10.0 A (r~267), ~5.0 A (r~541), ~3.0 A (r~928)
+    for r_px in [267, 541, 928]:
+        x = int(cx + r_px * 0.707)
+        y = int(cy + r_px * 0.707)
+        if 0 < x < nx - 2 and 0 < y < ny - 2:
+            data[y-1:y+2, x-1:x+2] += 500.0
+
+    # Mask the shell [4.5, 5.5] Angstroms
+    params = SpotParams(
+        beam_x=cx,
+        beam_y=cy,
+        pixel_size_x=qx,
+        pixel_size_y=qy,
+        distance=distance,
+        wavelength=wavelength,
+        ice_mask=False,
+        masked_rings=[(4.5, 5.5)],
+    )
+
+    spot_list = findspots_data(data, params=params)
+    for spot in spot_list.spots:
+        assert not (4.5 <= spot.d_spacing <= 5.5), f"Spot at d={spot.d_spacing:.3f} survived inside masked shell [4.5, 5.5]"
