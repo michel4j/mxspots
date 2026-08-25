@@ -157,7 +157,7 @@ print(f"Ice Score:           {result.ice_score:.2f}")
 ```python
 from mxspots import detect_ice_rings, SpotParams
 
-params = SpotParams(ice_sensitivity=1.0)
+params = SpotParams(ice_sensitivity=2.5)
 ice_result = detect_ice_rings("frame_00001.cbf", params=params)
 
 if ice_result.num_rings > 0:
