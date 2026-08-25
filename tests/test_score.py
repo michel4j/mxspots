@@ -6,7 +6,6 @@ from mxspots.synthetic import load_synthetic_spec, generate_synthetic_frame
 
 def test_score_clean_frame(test_data_dir):
     from mxspots.scorer import score
-
     yaml_path = test_data_dir / "clean.yaml"
     result = score(yaml_path)
 
@@ -159,7 +158,7 @@ def test_score_cli_text(test_data_dir, capsys, monkeypatch):
     assert "Spot Count" in captured.out
     assert "Average SNR" in captured.out
     assert "Resolution Limit" in captured.out
-    assert "95th percentile" in captured.out
+    assert "98th percentile" in captured.out
     assert "Bragg Spots:" in captured.out
     assert "Bragg %:" in captured.out
     assert "Avg Intensity:" in captured.out

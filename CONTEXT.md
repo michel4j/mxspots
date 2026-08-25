@@ -37,7 +37,7 @@ The automatic detection and exclusion of pixels or candidate spots falling withi
 _Avoid_: Ring stripping, peak cutting
 
 **Resolution Limit**:
-The highest resolution (smallest $d$-spacing in Angstroms, evaluated at the 95th percentile $d_{95}$) at which statistically significant diffraction spots are identified on a frame.
+The highest resolution (smallest $d$-spacing in Angstroms, evaluated at the 98th percentile $d_{98}$) at which statistically significant diffraction spots are identified on a frame.
 _Avoid_: Max resolution, high-resolution cutoff
 
 **Bragg Spots**:
@@ -57,7 +57,7 @@ The presence of multiple independent crystal lattices detected on a single diffr
 _Avoid_: Overlapping frames, double lattice, multiple crystals
 
 **Composite Quality Score**:
-A normalized 0–100 quality metric computed by the Spot Engine using a Hybrid Gated-Logistic model combining Bragg spot count, Bragg percent, Bragg average intensity, average SNR, and 95th percentile resolution limit ($d_{95}$) with ice contamination penalties. A strict zero-gate applies if no Bragg spots are found ($N_{\text{bragg}} = 0$).
+A normalized 0–100 quality metric computed by the Spot Engine using a Hybrid Gated-Logistic model (ADR 0020). Bragg spot count and average SNR serve as the major co-equal factors (~82% dynamic share), followed by Bragg percentage as the secondary factor (~12%), and 98th percentile resolution limit ($d_{98}$) as the tertiary factor (~6%), with post-logistic ice contamination penalties capped at 10 points. A strict zero-gate applies if no Bragg spots are found ($N_{\text{bragg}} = 0$).
 _Avoid_: Frame score, quality index, total score
 
 **XDS Spot File**:
@@ -74,4 +74,4 @@ _Avoid_: Fake frame, mock image
 Command and Python interface for detecting spots on diffraction frames and outputting spot coordinates, intensities, and ice ring summaries.
 
 **mxspots.score**:
-Command and Python interface for computing frame quality metrics including spot count, Bragg spots, Bragg percent, average intensity, SNR, resolution limit ($d_{95}$), ice contamination score, number of lattices, and composite quality score.
+Command and Python interface for computing frame quality metrics including spot count, Bragg spots, Bragg percent, average intensity, SNR, resolution limit ($d_{98}$), ice contamination score, number of lattices, and composite quality score.

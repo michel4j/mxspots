@@ -470,11 +470,11 @@ int mxspots_analyze_regularity(
 
     float avg_intensity = (bragg_spots > 0) ? (float)(sum_bragg_intensity / (double)bragg_spots) : 0.0f;
 
-    /* Compute 95th percentile resolution limit exclusively from confirmed Bragg spots */
+    /* Compute 98th percentile resolution limit exclusively from confirmed Bragg spots */
     float bragg_d_min = 999.0f;
     if (bragg_d_count > 0 && bragg_d != NULL) {
         qsort(bragg_d, bragg_d_count, sizeof(float), compare_float_asc);
-        int k = (int)(0.05f * (float)(bragg_d_count - 1));
+        int k = (int)(0.02f * (float)(bragg_d_count - 1));
         if (k < 0) k = 0;
         if (k >= bragg_d_count) k = bragg_d_count - 1;
         bragg_d_min = bragg_d[k];
@@ -937,7 +937,7 @@ int mxspots_score_spots(
         }
         if (valid_d_count > 0 && d_spacings != NULL) {
             qsort(d_spacings, valid_d_count, sizeof(float), compare_float_asc);
-            int k = (int)(0.05f * (float)(valid_d_count - 1));
+            int k = (int)(0.02f * (float)(valid_d_count - 1));
             if (k < 0) k = 0;
             if (k >= valid_d_count) k = valid_d_count - 1;
             out_score->d_min = d_spacings[k];
@@ -949,35 +949,39 @@ int mxspots_score_spots(
         }
     }
 
-    float d_95 = out_score->d_min;
+    float d_98 = out_score->d_min;
 
     float p_bragg = (out_score->bragg_percent > 0.0f) ? out_score->bragg_percent : (100.0f * (float)n_bragg / (float)spot_count);
     if (p_bragg > 100.0f) p_bragg = 100.0f;
     if (p_bragg < 0.0f) p_bragg = 0.0f;
 
-    float i_bragg = (out_score->avg_intensity > 0.0f) ? out_score->avg_intensity : 0.0f;
     float snr = (out_score->avg_snr > 0.0f) ? out_score->avg_snr : 0.0f;
 
     float s_res = 0.0f;
-    if (d_95 < 4.0f) {
-        s_res = (4.0f - d_95) / (4.0f - 1.2f);
+    if (d_98 < 4.0f) {
+        s_res = (4.0f - d_98) / (4.0f - 1.2f);
         if (s_res > 1.0f) s_res = 1.0f;
         if (s_res < 0.0f) s_res = 0.0f;
     }
 
-    float p_ice = 0.8f * (float)out_score->num_ice_rings;
+    float z = -6.50f + 0.75f * logf(1.0f + (float)n_bragg)
+                     + 1.20f * logf(1.0f + snr)
+                     + 1.40f * (p_bragg / 100.0f)
+                     + 0.50f * s_res;
+
+    float raw_score = 100.0f / (1.0f + expf(-z));
+    if (raw_score > 100.0f) raw_score = 100.0f;
+    if (raw_score < 0.0f) raw_score = 0.0f;
+
+    /* Ice penalty: capped at at most 10 points (10% score reduction) */
+    float p_ice = 2.0f * (float)out_score->num_ice_rings;
     if (out_score->ice_score > 2.0f) {
-        p_ice += 0.4f * (out_score->ice_score - 2.0f);
+        p_ice += 1.0f * (out_score->ice_score - 2.0f);
     }
+    if (p_ice > 10.0f) p_ice = 10.0f;
+    if (p_ice < 0.0f) p_ice = 0.0f;
 
-    float z = -5.5f + 0.85f * logf(1.0f + (float)n_bragg)
-                    + 1.20f * (p_bragg / 100.0f)
-                    + 0.45f * logf(1.0f + (i_bragg / 50.0f))\
-                    + 0.50f * logf(1.0f + snr)
-                    + 0.60f * s_res
-                    - p_ice;
-
-    float score = 100.0f / (1.0f + expf(-z));
+    float score = raw_score - p_ice;
     if (score > 100.0f) score = 100.0f;
     if (score < 0.0f) score = 0.0f;
 

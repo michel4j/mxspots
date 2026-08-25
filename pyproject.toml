@@ -1,6 +1,6 @@
 [project]
 name = "mxspots"
-version = "2026.8.1"
+version = "2026.8.3"
 description = "Spot Analysis for Assessing Quality of MX Diffraction Frames"
 authors = [
     {name = "Michel Fodje", email = "michel4j@gmail.com"}

@@ -62,7 +62,7 @@ typedef struct {
     float bragg_percent;       /* Fraction of spots conforming to regular lattice graph (0-100%) */
     float avg_intensity;       /* Mean integrated intensity of regular Bragg spots */
     float avg_snr;             /* Average signal-to-noise ratio */
-    float d_min;               /* 95th percentile resolution limit in Angstroms (computed from Bragg spots) */
+    float d_min;               /* 98th percentile resolution limit in Angstroms (computed from Bragg spots) */
     float ice_score;           /* Ice contamination score */
     int num_ice_rings;         /* Number of detected ice rings */
     int num_lattices;          /* Number of distinct crystal lattices identified */
