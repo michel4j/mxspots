@@ -15,6 +15,7 @@ def score_spots(
     bragg_spots: Optional[int] = None,
     bragg_percent: Optional[float] = None,
     avg_intensity: Optional[float] = None,
+    avg_snr: Optional[float] = None,
     num_lattices: Optional[int] = None,
     ice_score: Optional[float] = None,
     num_ice_rings: Optional[int] = None,
@@ -56,6 +57,7 @@ def score_spots(
         c_pct_bragg = ctypes.c_float(0.0)
         c_bragg_cnt = ctypes.c_int(0)
         c_avg_int = ctypes.c_float(0.0)
+        c_avg_snr = ctypes.c_float(0.0)
         c_n_lat = ctypes.c_int(0)
         c_d_min = ctypes.c_float(999.0)
         try:
@@ -66,6 +68,7 @@ def score_spots(
                 ctypes.byref(c_pct_bragg),
                 ctypes.byref(c_bragg_cnt),
                 ctypes.byref(c_avg_int),
+                ctypes.byref(c_avg_snr),
                 ctypes.byref(c_n_lat),
                 ctypes.byref(c_d_min),
             )
@@ -73,6 +76,8 @@ def score_spots(
                 bragg_percent = float(c_pct_bragg.value)
                 bragg_spots = int(c_bragg_cnt.value)
                 avg_intensity = float(c_avg_int.value)
+                if avg_snr is None:
+                    avg_snr = float(c_avg_snr.value)
                 num_lattices = int(c_n_lat.value)
                 reg_d_min = float(c_d_min.value)
         except Exception:
@@ -85,6 +90,8 @@ def score_spots(
         out_score.bragg_percent = ctypes.c_float(bragg_percent)
     if avg_intensity is not None:
         out_score.avg_intensity = ctypes.c_float(avg_intensity)
+    if avg_snr is not None:
+        out_score.avg_snr = ctypes.c_float(avg_snr)
     if num_lattices is not None:
         out_score.num_lattices = ctypes.c_int(num_lattices)
     if reg_d_min is not None:
