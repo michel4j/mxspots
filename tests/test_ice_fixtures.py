@@ -55,14 +55,18 @@ def test_score_result_ice_metadata():
         avg_snr=6.5,
         d_min=1.8,
         ice_score=4.8,
-        ice_rings_detected=[3.897, 3.669],
+        ice_rings_detected=[
+            IceRing(d_spacing=3.897, d_min=3.85, d_max=3.95, score=4.2),
+            IceRing(d_spacing=3.669, d_min=3.62, d_max=3.72, score=3.8),
+        ],
     )
     assert res.ice_score == pytest.approx(4.8)
-    assert res.ice_rings_detected == [3.897, 3.669]
+    assert res.ice_rings_detected[0].d_spacing == pytest.approx(3.897)
+    assert res.ice_rings_detected[1].d_spacing == pytest.approx(3.669)
 
     d = res.to_dict()
     assert d["ice_score"] == pytest.approx(4.8)
-    assert d["ice_rings_detected"] == [3.897, 3.669]
+    assert d["ice_rings_detected"][0]["d_spacing"] == pytest.approx(3.897)
     json_str = res.to_json()
     assert "ice_score" in json_str
 

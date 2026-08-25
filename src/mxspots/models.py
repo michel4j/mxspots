@@ -97,7 +97,7 @@ class ScoreResult:
     num_ice_rings: int = 0
     num_lattices: int = 0
     score: float = 0.0
-    ice_rings_detected: Optional[List[float]] = None
+    ice_rings_detected: Optional[List[IceRing]] = None
 
     def to_dict(self) -> dict:
         return asdict(self)

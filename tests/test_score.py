@@ -125,6 +125,7 @@ def test_score_ice_frame_metrics(test_data_dir):
     assert result.ice_score > 0.0
     assert result.ice_rings_detected is not None
     assert len(result.ice_rings_detected) > 0
+    assert all(hasattr(r, "d_min") and hasattr(r, "d_max") for r in result.ice_rings_detected)
 
 
 def test_score_lyso_split_multi_lattice(test_data_dir):

@@ -136,4 +136,5 @@ def score_main():
         if score_res.ice_score > 0.0:
             print(f"  Ice Score:          {score_res.ice_score:.2f}")
         if score_res.ice_rings_detected:
-            print(f"  Ice Rings Detected: {len(score_res.ice_rings_detected)}")
+            ring_strs = [f"{r.d_spacing:.2f} Å" for r in score_res.ice_rings_detected]
+            print(f"  Ice Rings Detected: {len(score_res.ice_rings_detected)} ({', '.join(ring_strs)})")
