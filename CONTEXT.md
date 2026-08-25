@@ -52,12 +52,16 @@ _Avoid_: Regularity rate, percentage regular, indexed fraction
 The mean integrated intensity across all regular Bragg spots on a frame.
 _Avoid_: Mean intensity, total spot intensity
 
+**Average Bragg SNR**:
+The mean signal-to-noise ratio evaluated strictly across confirmed regular Bragg reflections on a frame. Isolating Bragg SNR ensures that low-significance noise blobs near the detection threshold do not dilute the crystal's genuine diffraction strength.
+_Avoid_: Mean spot SNR, overall SNR
+
 **Multi-Lattice / Split Crystal**:
 The presence of multiple independent crystal lattices detected on a single diffraction frame, identified by distinct connected components in the difference vector recurrence graph.
 _Avoid_: Overlapping frames, double lattice, multiple crystals
 
 **Composite Quality Score**:
-A normalized 0–100 quality metric computed by the Spot Engine using a Hybrid Gated-Logistic model (ADR 0020). Bragg spot count and average SNR serve as the major co-equal factors (~82% dynamic share), followed by Bragg percentage as the secondary factor (~12%), and 98th percentile resolution limit ($d_{98}$) as the tertiary factor (~6%), with post-logistic ice contamination penalties capped at 10 points. A strict zero-gate applies if no Bragg spots are found ($N_{\text{bragg}} = 0$).
+A normalized 0–100 quality metric computed by the Spot Engine using a Hybrid Gated-Logistic model (ADR 0020). Bragg spot count and average Bragg SNR serve as the major co-equal factors (~82% dynamic share), followed by Bragg percentage as the secondary factor (~12%), and 98th percentile resolution limit ($d_{98}$) as the tertiary factor (~6%), with post-logistic ice contamination penalties capped at 10 points. A strict zero-gate applies if no Bragg spots are found ($N_{\text{bragg}} = 0$).
 _Avoid_: Frame score, quality index, total score
 
 **XDS Spot File**:
@@ -74,4 +78,4 @@ _Avoid_: Fake frame, mock image
 Command and Python interface for detecting spots on diffraction frames and outputting spot coordinates, intensities, and ice ring summaries.
 
 **mxspots.score**:
-Command and Python interface for computing frame quality metrics including spot count, Bragg spots, Bragg percent, average intensity, SNR, resolution limit ($d_{98}$), ice contamination score, number of lattices, and composite quality score.
+Command and Python interface for computing frame quality metrics including spot count, Bragg spots, Bragg percent, average intensity, Bragg SNR, resolution limit ($d_{98}$), ice contamination score, number of lattices, and composite quality score.
