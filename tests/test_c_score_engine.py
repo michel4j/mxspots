@@ -225,3 +225,178 @@ def test_c_mxspots_score_ice_penalty_capped_at_10_points():
     assert ret == 0
 
     assert base_score - out_mod_ice.score == pytest.approx(3.0, abs=1e-4)
+
+
+def test_c_mxspots_score_major_factor_sensitivity():
+    """Verify that Bragg spot count and SNR are major co-equal drivers with large dynamic score impact."""
+    lib = get_lib()
+
+    def run_eval(n_spots: int, n_bragg: int, snr_val: float, p_bragg: float, d_val: float) -> float:
+        c_spots = (CMxSpot * n_spots)()
+        for i in range(n_spots):
+            c_spots[i].x = float(100 + i)
+            c_spots[i].y = float(100 + i)
+            c_spots[i].d_spacing = d_val
+            c_spots[i].intensity = 1000.0
+            c_spots[i].snr = snr_val
+
+        out = CMxScoreResult()
+        out.bragg_spots = n_bragg
+        out.bragg_percent = p_bragg
+        out.d_min = d_val
+        out.num_ice_rings = 0
+        out.ice_score = 0.0
+        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out))
+        assert ret == 0
+        return out.score
+
+    # 1. SNR sensitivity when Bragg count is fixed (50 spots)
+    score_low_snr = run_eval(50, 40, snr_val=2.5, p_bragg=80.0, d_val=2.0)
+    score_high_snr = run_eval(50, 40, snr_val=35.0, p_bragg=80.0, d_val=2.0)
+    # Delta should be substantial (> 25 points)
+    assert score_high_snr - score_low_snr > 25.0
+
+    # 2. Bragg count sensitivity when SNR is fixed (SNR = 15)
+    score_few_bragg = run_eval(10, 8, snr_val=15.0, p_bragg=80.0, d_val=2.0)
+    score_many_bragg = run_eval(120, 96, snr_val=15.0, p_bragg=80.0, d_val=2.0)
+    # Delta should be substantial (> 25 points)
+    assert score_many_bragg - score_few_bragg > 25.0
+
+
+def test_c_mxspots_score_factor_hierarchy_coequal_major_factors():
+    """Verify that a high-SNR crystal with moderate spot count outscores a noisy high-count frame with poor SNR."""
+    lib = get_lib()
+
+    def run_eval(n_spots: int, n_bragg: int, snr_val: float, p_bragg: float, d_val: float) -> float:
+        c_spots = (CMxSpot * n_spots)()
+        for i in range(n_spots):
+            c_spots[i].x = float(100 + i)
+            c_spots[i].y = float(100 + i)
+            c_spots[i].d_spacing = d_val
+            c_spots[i].intensity = 1000.0
+            c_spots[i].snr = snr_val
+
+        out = CMxScoreResult()
+        out.bragg_spots = n_bragg
+        out.bragg_percent = p_bragg
+        out.d_min = d_val
+        out.num_ice_rings = 0
+        out.ice_score = 0.0
+        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out))
+        assert ret == 0
+        return out.score
+
+    # Frame A: Strong diffraction with moderate spot count (40 Bragg spots, SNR = 30.0, 80% Bragg)
+    score_strong = run_eval(50, 40, snr_val=30.0, p_bragg=80.0, d_val=2.0)
+
+    # Frame B: Weak / noisy frame with high spot count (150 Bragg spots, SNR = 3.5, 80% Bragg)
+    score_weak_noisy = run_eval(188, 150, snr_val=3.5, p_bragg=80.0, d_val=2.0)
+
+    # Strong high-SNR diffraction frame must decisively outscore the weak noisy high-count frame
+    assert score_strong > score_weak_noisy
+    assert score_strong - score_weak_noisy > 15.0
+
+
+def test_c_mxspots_score_secondary_factor_bragg_percent_modulation():
+    """Verify that Bragg percentage acts as a secondary factor providing moderate score modulation."""
+    lib = get_lib()
+
+    def run_eval(n_spots: int, n_bragg: int, snr_val: float, p_bragg: float, d_val: float) -> float:
+        c_spots = (CMxSpot * n_spots)()
+        for i in range(n_spots):
+            c_spots[i].x = float(100 + i)
+            c_spots[i].y = float(100 + i)
+            c_spots[i].d_spacing = d_val
+            c_spots[i].intensity = 1000.0
+            c_spots[i].snr = snr_val
+
+        out = CMxScoreResult()
+        out.bragg_spots = n_bragg
+        out.bragg_percent = p_bragg
+        out.d_min = d_val
+        out.num_ice_rings = 0
+        out.ice_score = 0.0
+        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out))
+        assert ret == 0
+        return out.score
+
+    # Fixed N_B = 50, SNR = 15.0, d_98 = 2.0 A
+    score_low_purity = run_eval(250, 50, snr_val=15.0, p_bragg=20.0, d_val=2.0)
+    score_high_purity = run_eval(55, 50, snr_val=15.0, p_bragg=90.9, d_val=2.0)
+
+    # Higher crystalline purity increases score moderately (typically 8-18 points)
+    delta = score_high_purity - score_low_purity
+    assert 5.0 < delta < 25.0
+
+
+def test_c_mxspots_score_tertiary_factor_resolution_refinement():
+    """Verify that resolution limit acts as a tertiary refinement factor."""
+    lib = get_lib()
+
+    def run_eval(n_spots: int, n_bragg: int, snr_val: float, p_bragg: float, d_val: float) -> float:
+        c_spots = (CMxSpot * n_spots)()
+        for i in range(n_spots):
+            c_spots[i].x = float(100 + i)
+            c_spots[i].y = float(100 + i)
+            c_spots[i].d_spacing = d_val
+            c_spots[i].intensity = 1000.0
+            c_spots[i].snr = snr_val
+
+        out = CMxScoreResult()
+        out.bragg_spots = n_bragg
+        out.bragg_percent = p_bragg
+        out.d_min = d_val
+        out.num_ice_rings = 0
+        out.ice_score = 0.0
+        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out))
+        assert ret == 0
+        return out.score
+
+    # Fixed N_B = 50, SNR = 15.0, P_B = 80.0%
+    score_low_res = run_eval(62, 50, snr_val=15.0, p_bragg=80.0, d_val=3.5)
+    score_high_res = run_eval(62, 50, snr_val=15.0, p_bragg=80.0, d_val=1.4)
+
+    # Resolution refinement yields subtle but positive improvement (typically 3-10 points)
+    delta = score_high_res - score_low_res
+    assert 2.0 < delta < 15.0
+
+
+def test_c_mxspots_score_exact_formula_calibration():
+    """Verify exact numerical agreement between C engine scoring and ADR 0020 specification."""
+    lib = get_lib()
+
+    test_cases = [
+        # (n_bragg, total_spots, p_bragg, snr, d_98, n_ice, ice_score)
+        (5, 20, 25.0, 3.0, 3.8, 0, 0.0),      # Minimal / weak
+        (35, 50, 70.0, 12.0, 2.2, 0, 0.0),    # Moderate
+        (120, 140, 85.7, 25.0, 1.6, 0, 0.0),  # Good
+        (300, 320, 93.75, 45.0, 1.2, 0, 0.0), # Outstanding
+        (80, 100, 80.0, 18.0, 2.0, 2, 4.5),   # Moderate with ice
+    ]
+
+    for n_b, n_s, p_b, snr, d, n_ice, ice_score in test_cases:
+        c_spots = (CMxSpot * n_s)()
+        for i in range(n_s):
+            c_spots[i].x = float(100 + i)
+            c_spots[i].y = float(100 + i)
+            c_spots[i].d_spacing = d
+            c_spots[i].intensity = 1000.0
+            c_spots[i].snr = snr
+
+        out = CMxScoreResult()
+        out.bragg_spots = n_b
+        out.bragg_percent = p_b
+        out.d_min = d
+        out.num_ice_rings = n_ice
+        out.ice_score = ice_score
+        ret = lib.mxspots_score_spots(c_spots, n_s, ctypes.byref(out))
+        assert ret == 0
+
+        # Compute ADR 0020 reference score in Python
+        s_res = max(0.0, min(1.0, (4.0 - d) / (4.0 - 1.2))) if d < 4.0 else 0.0
+        z = -6.50 + 0.75 * math.log(1.0 + n_b) + 1.20 * math.log(1.0 + snr) + 1.40 * (p_b / 100.0) + 0.50 * s_res
+        raw_score = 100.0 / (1.0 + math.exp(-z))
+        p_ice = min(10.0, max(0.0, 2.0 * n_ice + max(0.0, ice_score - 2.0)))
+        expected_score = max(0.0, min(100.0, raw_score - p_ice))
+
+        assert out.score == pytest.approx(expected_score, abs=1e-3)
