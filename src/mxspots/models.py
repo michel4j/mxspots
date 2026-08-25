@@ -29,7 +29,7 @@ class SpotParams:
     d_min: float = 0.0           # Angstroms (0.0 for unbounded)
     d_max: float = 20.0          # Angstroms
     ice_mask: bool = True        # Automatically detect and mask ice rings
-    ice_sensitivity: float = 1.0 # Statistical threshold for ice ring detection
+    ice_sensitivity: float = 2.5 # Statistical threshold for ice ring detection
     masked_rings: Optional[List[Tuple[float, float]]] = None  # (d_min, d_max) Angstrom shells to mask
 
 

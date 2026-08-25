@@ -31,8 +31,12 @@ class CMxSpotsParams(ctypes.Structure):
         wavelength = params.wavelength if params.wavelength > 0.0 else 1.0
         masked_r2_arr = ((ctypes.c_float * 2) * 16)()
         num_rings = 0
+
         if params.masked_rings:
-            for d_min_ring, d_max_ring in params.masked_rings[:16]:
+            raw_intervals = []
+            for d_min_ring, d_max_ring in params.masked_rings:
+                if d_min_ring <= 0.0 and d_max_ring <= 0.0:
+                    continue
                 # d_max corresponds to smaller radius r_min, d_min corresponds to larger radius r_max
                 r_min = 0.0
                 if d_max_ring > 0.0:
@@ -53,9 +57,25 @@ class CMxSpotsParams(ctypes.Structure):
 
                 r2_a = r_min * r_min
                 r2_b = r_max * r_max
-                masked_r2_arr[num_rings][0] = ctypes.c_float(min(r2_a, r2_b))
-                masked_r2_arr[num_rings][1] = ctypes.c_float(max(r2_a, r2_b))
-                num_rings += 1
+                low = min(r2_a, r2_b)
+                high = max(r2_a, r2_b)
+                raw_intervals.append((low, high))
+
+            if raw_intervals:
+                # Sort and merge overlapping/contiguous intervals
+                raw_intervals.sort(key=lambda x: x[0])
+                merged = [raw_intervals[0]]
+                for current in raw_intervals[1:]:
+                    prev_low, prev_high = merged[-1]
+                    if current[0] <= prev_high:
+                        merged[-1] = (prev_low, max(prev_high, current[1]))
+                    else:
+                        merged.append(current)
+
+                for low, high in merged[:16]:
+                    masked_r2_arr[num_rings][0] = ctypes.c_float(low)
+                    masked_r2_arr[num_rings][1] = ctypes.c_float(high)
+                    num_rings += 1
 
         return cls(
             snr_threshold=ctypes.c_float(params.snr_threshold),

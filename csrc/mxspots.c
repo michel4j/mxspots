@@ -1197,10 +1197,12 @@ int mxspots_detect_ice(
 
         /* Find peak in range [b_center - 3, b_center + 3] */
         float peak_val = 0.0f;
+        int peak_b = b_center;
         for (int b = b_center - 3; b <= b_center + 3; ++b) {
             if (b >= 0 && b < num_bins) {
                 if (radial_mean[b] > peak_val) {
                     peak_val = radial_mean[b];
+                    peak_b = b;
                 }
             }
         }
@@ -1211,17 +1213,62 @@ int mxspots_detect_ice(
         }
 
         if (snr >= sensitivity) {
-            float delta_r_px = 5.0f;
-            float r_low_mm = (r_px - delta_r_px > 1.0f) ? ((r_px - delta_r_px) * q_avg) : (1.0f * q_avg);
-            float r_high_mm = (r_px + delta_r_px) * q_avg;
+            /* 1. Empirical peak extent estimation */
+            float half_height = (float)(bg_mean + 0.25 * (peak_val - bg_mean));
+            int b_left = peak_b;
+            while (b_left > 0 && b_left >= peak_b - 15 && radial_mean[b_left] > half_height) {
+                b_left--;
+            }
+            int b_right = peak_b;
+            while (b_right < num_bins - 1 && b_right <= peak_b + 15 && radial_mean[b_right] > half_height) {
+                b_right++;
+            }
+
+            /* 2. Annulus-width expansion policy */
+            /* Minimum half-width floor: at least 6.0 px or 2.0% of radius */
+            float min_half_width_px = 6.0f;
+            float r_scale_half = 0.020f * (float)peak_b;
+            if (r_scale_half > min_half_width_px) {
+                min_half_width_px = r_scale_half;
+            }
+
+            float padding_px = 4.0f;
+            float r_low_px = (float)b_left - padding_px;
+            float r_high_px = (float)b_right + padding_px;
+
+            if ((float)peak_b - r_low_px < min_half_width_px) {
+                r_low_px = (float)peak_b - min_half_width_px;
+            }
+            if (r_high_px - (float)peak_b < min_half_width_px) {
+                r_high_px = (float)peak_b + min_half_width_px;
+            }
+
+            /* Edge handling */
+            if (r_low_px < 1.0f) {
+                r_low_px = 1.0f;
+            }
+            if (r_high_px <= r_low_px) {
+                r_high_px = r_low_px + 2.0f;
+            }
+
+            float r_low_mm = r_low_px * q_avg;
+            float r_high_mm = r_high_px * q_avg;
 
             float theta_low = 0.5f * atan2f(r_low_mm, distance);
             float sin_t_low = sinf(theta_low);
-            float d_max_ring = (sin_t_low > 1e-6f) ? (wavelength / (2.0f * sin_t_low)) : 30.0f;
+            float d_max_ring = (sin_t_low > 1e-6f) ? (wavelength / (2.0f * sin_t_low)) : 50.0f;
 
             float theta_high = 0.5f * atan2f(r_high_mm, distance);
             float sin_t_high = sinf(theta_high);
-            float d_min_ring = (sin_t_high > 1e-6f) ? (wavelength / (2.0f * sin_t_high)) : 1.0f;
+            float d_min_ring = (sin_t_high > 1e-6f && sin_t_high < 1.0f) ? (wavelength / (2.0f * sin_t_high)) : 0.5f;
+
+            /* Ensure resolution bounds envelope the nominal ring resolution */
+            if (d_min_ring > d_ice * 0.98f) {
+                d_min_ring = d_ice * 0.98f;
+            }
+            if (d_max_ring < d_ice * 1.02f) {
+                d_max_ring = d_ice * 1.02f;
+            }
 
             int ring_idx = out_result->num_rings;
             out_result->rings[ring_idx].d_spacing = d_ice;

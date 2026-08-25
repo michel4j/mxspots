@@ -20,7 +20,7 @@ def test_ice_ring_dataclass():
 def test_spot_params_ice_defaults():
     params = SpotParams()
     assert params.ice_mask is True
-    assert params.ice_sensitivity == pytest.approx(1.0)
+    assert params.ice_sensitivity == pytest.approx(2.5)
     assert params.masked_rings is None
 
     custom = SpotParams(ice_mask=False, ice_sensitivity=5.0, masked_rings=[(3.6, 3.7), (3.85, 3.95)])
@@ -128,3 +128,27 @@ def test_add_powder_ring_synthetic():
 
     # Center pixel should have zero added intensity
     assert out[int(cy), int(cx)] == pytest.approx(0.0, abs=1e-3)
+
+def test_c_mxspots_params_overlapping_rings_merging():
+    # Pass two overlapping rings: (3.80, 3.95) and (3.65, 3.85)
+    params = SpotParams(
+        distance=200.0,
+        wavelength=1.0,
+        masked_rings=[(3.80, 3.95), (3.65, 3.85)],
+    )
+    c_params = CMxSpotsParams.from_params(params)
+    # The two overlapping rings should be merged into a single interval
+    assert c_params.num_masked_rings == 1
+    min_r2 = c_params.masked_rings_r2[0][0]
+    max_r2 = c_params.masked_rings_r2[0][1]
+    assert min_r2 > 0.0
+    assert max_r2 > min_r2
+
+    # Pass distinct non-overlapping rings: (3.80, 3.95) and (2.00, 2.10)
+    params_distinct = SpotParams(
+        distance=200.0,
+        wavelength=1.0,
+        masked_rings=[(3.80, 3.95), (2.00, 2.10)],
+    )
+    c_params_distinct = CMxSpotsParams.from_params(params_distinct)
+    assert c_params_distinct.num_masked_rings == 2

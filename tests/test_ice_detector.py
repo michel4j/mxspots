@@ -198,3 +198,46 @@ def test_detect_ice_benchmark_scaling(clean_frame):
 
     print(f"\n[Ice Detection Benchmark] 3072x3072 processing time: {elapsed * 1000.0:.2f} ms")
     assert elapsed < 0.15  # Sub-150ms for entire 3072x3072 frame OpenMP radial profiling
+
+def test_ice_annulus_width_expansion_envelope():
+    # Construct synthetic frame with a broad ice ring
+    rng = np.random.default_rng(99)
+    ny, nx = 1024, 1024
+    cx, cy = 512.0, 512.0
+    qx, qy = 0.075, 0.075
+    distance = 200.0
+    wavelength = 1.0
+    d_target = 3.897
+
+    data = rng.normal(loc=10.0, scale=2.0, size=(ny, nx)).astype(np.float32)
+    add_powder_ring(
+        data,
+        cx=cx,
+        cy=cy,
+        qx=qx,
+        qy=qy,
+        distance=distance,
+        wavelength=wavelength,
+        d_spacing=d_target,
+        radial_width=5.0,
+        peak_intensity=50.0,
+    )
+
+    params = SpotParams(
+        beam_x=cx,
+        beam_y=cy,
+        pixel_size_x=qx,
+        pixel_size_y=qy,
+        distance=distance,
+        wavelength=wavelength,
+        ice_sensitivity=3.0,
+    )
+
+    rings, score = detect_ice_rings_data(data, params=params)
+    assert len(rings) >= 1
+    ring = rings[0]
+
+    # Verify that the ring expansion envelopes the target d_spacing
+    assert ring.d_min <= d_target * 0.98 + 1e-4
+    assert ring.d_max >= d_target * 1.02 - 1e-4
+    assert ring.score >= 3.0
