@@ -964,10 +964,10 @@ int mxspots_score_spots(
         if (s_res < 0.0f) s_res = 0.0f;
     }
 
-    float z = -5.5f + 0.85f * logf(1.0f + (float)n_bragg)
-                    + 1.20f * (p_bragg / 100.0f)
-                    + 0.50f * logf(1.0f + snr)
-                    + 0.60f * s_res;
+    float z = -6.50f + 0.75f * logf(1.0f + (float)n_bragg)
+                     + 1.20f * logf(1.0f + snr)
+                     + 1.40f * (p_bragg / 100.0f)
+                     + 0.50f * s_res;
 
     float raw_score = 100.0f / (1.0f + expf(-z));
     if (raw_score > 100.0f) raw_score = 100.0f;
