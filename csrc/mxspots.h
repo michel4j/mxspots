@@ -61,7 +61,7 @@ typedef struct {
     int bragg_spots;           /* Number of regular Bragg spots */
     float bragg_percent;       /* Fraction of spots conforming to regular lattice graph (0-100%) */
     float avg_intensity;       /* Mean integrated intensity of regular Bragg spots */
-    float avg_snr;             /* Average signal-to-noise ratio */
+    float avg_snr;             /* Average signal-to-noise ratio of regular Bragg spots */
     float d_min;               /* 98th percentile resolution limit in Angstroms (computed from Bragg spots) */
     float ice_score;           /* Ice contamination score */
     int num_ice_rings;         /* Number of detected ice rings */
@@ -168,6 +168,7 @@ MXSPOTS_API int mxspots_analyze_regularity(
     float *out_bragg_percent,
     int *out_bragg_spots,
     float *out_avg_intensity,
+    float *out_avg_snr,
     int *out_num_lattices,
     float *out_d_min
 );

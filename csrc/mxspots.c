@@ -245,12 +245,14 @@ int mxspots_analyze_regularity(
     float *out_bragg_percent,
     int *out_bragg_spots,
     float *out_avg_intensity,
+    float *out_avg_snr,
     int *out_num_lattices,
     float *out_d_min
 ) {
     if (out_bragg_percent != NULL) *out_bragg_percent = 0.0f;
     if (out_bragg_spots != NULL) *out_bragg_spots = 0;
     if (out_avg_intensity != NULL) *out_avg_intensity = 0.0f;
+    if (out_avg_snr != NULL) *out_avg_snr = 0.0f;
     if (out_num_lattices != NULL) *out_num_lattices = 0;
     if (out_d_min != NULL) *out_d_min = 999.0f;
 
@@ -445,6 +447,7 @@ int mxspots_analyze_regularity(
     int num_lattices = 0;
     int min_comp_size = 5;
     double sum_bragg_intensity = 0.0;
+    double sum_bragg_snr = 0.0;
 
     float *bragg_d = (float *)malloc(n_spots * sizeof(float));
     int bragg_d_count = 0;
@@ -459,6 +462,7 @@ int mxspots_analyze_regularity(
         if (uf_size[root] >= min_comp_size) {
             bragg_spots++;
             sum_bragg_intensity += (double)spots[i].intensity;
+            sum_bragg_snr += (double)spots[i].snr;
             if (spots[i].d_spacing > 0.0f && spots[i].d_spacing < 900.0f && bragg_d != NULL) {
                 bragg_d[bragg_d_count++] = spots[i].d_spacing;
             }
@@ -469,6 +473,7 @@ int mxspots_analyze_regularity(
     if (bragg_percent > 100.0f) bragg_percent = 100.0f;
 
     float avg_intensity = (bragg_spots > 0) ? (float)(sum_bragg_intensity / (double)bragg_spots) : 0.0f;
+    float avg_snr = (bragg_spots > 0) ? (float)(sum_bragg_snr / (double)bragg_spots) : 0.0f;
 
     /* Compute 98th percentile resolution limit exclusively from confirmed Bragg spots */
     float bragg_d_min = 999.0f;
@@ -486,6 +491,7 @@ int mxspots_analyze_regularity(
     if (out_bragg_percent != NULL) *out_bragg_percent = bragg_percent;
     if (out_bragg_spots != NULL) *out_bragg_spots = bragg_spots;
     if (out_avg_intensity != NULL) *out_avg_intensity = avg_intensity;
+    if (out_avg_snr != NULL) *out_avg_snr = avg_snr;
     if (out_num_lattices != NULL) *out_num_lattices = num_lattices;
     if (out_d_min != NULL) *out_d_min = bragg_d_min;
 
@@ -906,11 +912,13 @@ int mxspots_score_spots(
     }
 
     out_score->spot_count = spot_count;
-    double sum_snr = 0.0;
-    for (int i = 0; i < spot_count; ++i) {
-        sum_snr += spots[i].snr;
+    if (out_score->avg_snr <= 0.0f && spots != NULL && spot_count > 0) {
+        double sum_snr = 0.0;
+        for (int i = 0; i < spot_count; ++i) {
+            sum_snr += spots[i].snr;
+        }
+        out_score->avg_snr = (float)(sum_snr / spot_count);
     }
-    out_score->avg_snr = (float)(sum_snr / spot_count);
 
     int n_bragg = out_score->bragg_spots;
     if (n_bragg <= 0 && out_score->bragg_percent > 0.0f) {
@@ -1022,6 +1030,7 @@ int mxspots_score_frame(
     out_score->bragg_spots = 0;
     out_score->bragg_percent = 0.0f;
     out_score->avg_intensity = 0.0f;
+    out_score->avg_snr = 0.0f;
     out_score->num_lattices = 0;
     out_score->d_min = 999.0f;
     if (actual_count >= 5) {
@@ -1032,6 +1041,7 @@ int mxspots_score_frame(
             &out_score->bragg_percent,
             &out_score->bragg_spots,
             &out_score->avg_intensity,
+            &out_score->avg_snr,
             &out_score->num_lattices,
             &out_score->d_min
         );
