@@ -1,5 +1,7 @@
 # 0016 - Hybrid Gated-Logistic Quality Scoring with Resolution Limit
 
+> _Note: The logit coefficients in this ADR were recalibrated in [ADR 0020](0020-calibrated-logistic-factor-hierarchy.md) to establish Bragg spot count and SNR as the primary co-equal drivers of composite quality scoring._
+
 ## Context
 The previous linear scoring formula suffered from hard boundary clipping and could assign non-zero scores to noisy frames with no periodic crystalline diffraction. A smooth logistic formulation with a strict gate on Bragg reflection presence ensures that only genuine crystalline diffraction patterns receive positive quality scores. Furthermore, placing ice penalties directly inside the exponential logit $z$ caused disproportionately punitive drops (>30-40 points) on typical frames.
 
