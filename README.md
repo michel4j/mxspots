@@ -11,7 +11,7 @@
 - **Fast Multithreaded Spot Finding**: Employs 2D Integral Images (Summed-Area Tables) and OpenMP parallelization for constant-time local background and dispersion estimation, followed by single-pass streaming Connected Component Labeling (CCL).
 - **Automated Ice Ring Detection & Masking**: Performs 1D azimuthal radial integration to detect characteristic powder ice rings (e.g., at 3.90 Å, 3.67 Å, 2.25 Å, 2.07 Å, 1.92 Å) and masks candidate spots falling within contaminated resolution shells.
 - **Reciprocal Difference-Vector Lattice Analysis**: Uses difference-vector recurrence clustering in reciprocal space to classify regular **Bragg spots** from amorphous scatter or noise without requiring reciprocal lattice FFT indexing.
-- **Hybrid Gated-Logistic Quality Scoring**: Generates a unified, normalized quality score ($0 - 100$) combining Bragg spot count, Bragg fraction, average SNR, resolution limit ($d_{98}$), and ice contamination penalties.
+- **Hybrid Gated-Logistic Quality Scoring**: Generates a unified, normalized quality score ($0 - 100$) using a calibrated factor hierarchy ([ADR 0020](docs/adr/0020-calibrated-logistic-factor-hierarchy.md)) combining Bragg spot count, Bragg fraction, average SNR, resolution limit ($d_{98}$), and ice contamination penalties.
 - **Zero-Allocation Batch Processing**: Pre-allocates reusable execution contexts (`MxSpotsContext`) for scratch buffers during batch grid scans and mesh screening.
 - **XDS Compatibility**: Supports exporting spots directly to `SPOT.XDS` format.
 
@@ -193,16 +193,25 @@ print(f"Score: {res.score:.1f}")
 
 ## Scoring Model
 
-The Composite Quality Score ($S \in [0, 100]$) uses a **Hybrid Gated-Logistic** model:
+The Composite Quality Score ($S \in [0, 100]$) uses a **Hybrid Gated-Logistic** model with a calibrated factor hierarchy ([ADR 0020](docs/adr/0020-calibrated-logistic-factor-hierarchy.md)):
 
-$$\text{Score} = \begin{cases} 0.0 & \text{if } N_{\text{bragg}} = 0 \\ \text{clamp}\left(\frac{100}{1 + e^{-z}} - P_{\text{ice}}, 0, 100\right) & \text{if } N_{\text{bragg}} > 0 \end{cases}$$
+$$\text{Score} = \begin{cases} 0.0 & \text{if } N_{\text{bragg}} = 0 \\ \text{clamp}\left(\frac{100}{1 + e^{-z}} - P_{\text{ice}},\, 0.0,\, 100.0\right) & \text{if } N_{\text{bragg}} > 0 \end{cases}$$
 
-where the logit $z$ is computed from:
-- **Bragg Spot Count ($N_{\text{bragg}}$)**: Logarithmic scaling $\ln(1 + N_{\text{bragg}})$
-- **Bragg Spot Fraction ($P_{\text{bragg}}$)**: Linear weighting of lattice conformity
-- **Signal-to-Noise Ratio ($\text{SNR}$)**: Logarithmic peak quality $\ln(1 + \text{SNR})$
-- **Bragg Resolution Limit ($d_{98}$)**: Linear scaling between $4.0\,\text{Å}$ and $1.2\,\text{Å}$
-- **Ice Penalties ($P_{\text{ice}}$)**: Post-logistic penalty capped at at most 10 points ($P_{\text{ice}} \in [0, 10]$) based on detected ice ring count and contamination severity
+where the logit $z$ is computed as:
+
+$$z = -6.50 + 0.75 \ln(1 + N_{\text{bragg}}) + 1.20 \ln(1 + \text{SNR}) + 1.40 (P_{\text{bragg}} / 100) + 0.50 s_{\text{res}}$$
+
+### Factor Hierarchy & Dynamic Share
+1. **Tier 1 (Major Co-Equal Drivers, ~82% dynamic share)**:
+   - **Bragg Spot Count ($N_{\text{bragg}}$)**: $w_N = 0.75 \ln(1 + N_{\text{bragg}})$ (~44.2% dynamic variance contribution)
+   - **Signal-to-Noise Ratio ($\text{SNR}$)**: $w_S = 1.20 \ln(1 + \text{SNR})$ (~38.2% dynamic variance contribution)
+2. **Tier 2 (Secondary Driver, ~12% dynamic share)**:
+   - **Bragg Percentage ($P_{\text{bragg}}$)**: $w_P = 1.40 (P_{\text{bragg}} / 100)$ (~11.9% contribution representing crystalline diffraction purity)
+3. **Tier 3 (Tertiary Refinement, ~6% dynamic share)**:
+   - **Resolution Limit ($s_{\text{res}}$)**: $w_{\text{res}} = 0.50 s_{\text{res}}$ where $s_{\text{res}} = \text{clamp}\left(\frac{4.0 - d_{98}}{4.0 - 1.2}, 0.0, 1.0\right)$ (~5.6% contribution)
+4. **Post-Logistic Ice Penalty ($P_{\text{ice}} \in [0.0, 10.0]$)**:
+   $$P_{\text{ice}} = \text{clamp}\left(2.0 N_{\text{ice}} + 1.0 \max(0.0, I_{\text{ice}} - 2.0),\, 0.0,\, 10.0\right)$$
+   Guarantees that ice contamination penalizes the quality score by at most 10 points (10%).
 
 ---
 
