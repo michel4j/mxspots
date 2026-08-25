@@ -400,3 +400,46 @@ def test_c_mxspots_score_exact_formula_calibration():
         expected_score = max(0.0, min(100.0, raw_score - p_ice))
 
         assert out.score == pytest.approx(expected_score, abs=1e-3)
+
+
+def test_c_mxspots_score_bragg_avg_snr_preservation():
+    """Verify that when out_score.avg_snr is pre-populated from Bragg regularity,
+    injecting low-SNR noise spots does not overwrite or dilute avg_snr or slash the quality score."""
+    lib = get_lib()
+
+    n_bragg = 40
+    n_noise = 160
+    total_spots = n_bragg + n_noise
+
+    c_spots = (CMxSpot * total_spots)()
+    # 40 strong Bragg spots with SNR = 35.0
+    for i in range(n_bragg):
+        c_spots[i].x = float(100 + i)
+        c_spots[i].y = float(100 + i)
+        c_spots[i].d_spacing = 2.0
+        c_spots[i].intensity = 5000.0
+        c_spots[i].snr = 35.0
+
+    # 160 low-SNR noise spots with SNR = 3.0
+    for i in range(n_bragg, total_spots):
+        c_spots[i].x = float(1000 + i)
+        c_spots[i].y = float(1000 + i)
+        c_spots[i].d_spacing = 4.5
+        c_spots[i].intensity = 150.0
+        c_spots[i].snr = 3.0
+
+    # Pre-populate out_score with Bragg avg_snr = 35.0
+    out = CMxScoreResult()
+    out.bragg_spots = n_bragg
+    out.bragg_percent = (n_bragg / total_spots) * 100.0
+    out.avg_snr = 35.0
+    out.d_min = 2.0
+    out.num_ice_rings = 0
+    out.ice_score = 0.0
+
+    ret = lib.mxspots_score_spots(c_spots, total_spots, ctypes.byref(out))
+    assert ret == 0
+    # avg_snr must NOT have been overwritten with (40*35 + 160*3)/200 = 9.4
+    assert out.avg_snr == pytest.approx(35.0, abs=1e-3)
+    # Score should remain high because the genuine Bragg SNR is preserved
+    assert out.score > 45.0

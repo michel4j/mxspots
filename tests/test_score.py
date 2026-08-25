@@ -95,6 +95,26 @@ def test_score_spots_explicit_bragg_values():
     assert result.score > 0.0
 
 
+def test_score_spots_explicit_avg_snr():
+    from mxspots.scorer import score_spots
+
+    spots = [
+        Spot(x=1500.0 + i * 20.0, y=1500.0 + i * 20.0, d_spacing=2.5, intensity=1000.0, snr=3.0)
+        for i in range(30)
+    ]
+    # Pass explicit avg_snr=40.0 overriding the spots' nominal SNR of 3.0
+    result = score_spots(
+        spots,
+        bragg_spots=25,
+        bragg_percent=83.3,
+        avg_snr=40.0,
+        avg_intensity=950.0,
+    )
+
+    assert result.avg_snr == pytest.approx(40.0)
+    assert result.score > 50.0
+
+
 def test_score_ice_frame_metrics(test_data_dir):
     from mxspots.scorer import score
 
