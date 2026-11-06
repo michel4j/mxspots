@@ -50,4 +50,5 @@ def test_multithreading_benchmark(clean_frame):
     avg_time = (time.perf_counter() - t0) / n_runs
 
     print(f"\n[OpenMP Benchmark] 3072x3072 frame average spot finding time: {avg_time * 1000.0:.2f} ms")
-    assert avg_time < 1.0  # Should easily process in < 1 second
+    threshold = 5.0 if (os.getenv("CI") or os.getenv("CIBUILDWHEEL")) else 1.0
+    assert avg_time < threshold

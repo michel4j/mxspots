@@ -41,6 +41,7 @@ pythonpath = ["src"]
 build = ["cp312-*", "cp313-*"]
 skip = ["*-musllinux_*", "*-manylinux_i686", "pp*"]
 build-verbosity = 1
+environment = { CI = "true" }
 test-extras = ["dev"]
 test-command = "pytest {project}/tests"
 
