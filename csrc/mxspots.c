@@ -1024,6 +1024,19 @@ int mxspots_score_spots(
         }
     }
 
+    int n_bragg = out_score->bragg_spots;
+    if (n_bragg <= 0 && out_score->bragg_percent > 0.0f) {
+        n_bragg = (int)roundf((out_score->bragg_percent / 100.0f) * (float)spot_count);
+    }
+
+    /* Strict gate: if no Bragg spots, resolution is unresolved (999.0), SNR is 0.0, and score is 0.0 */
+    if (n_bragg <= 0) {
+        out_score->d_min = 999.0f;
+        out_score->avg_snr = 0.0f;
+        out_score->score = 0.0f;
+        return 0;
+    }
+
     out_score->spot_count = spot_count;
     if (out_score->avg_snr <= 0.0f && spots != NULL && spot_count > 0) {
         double sum_snr = 0.0;
@@ -1031,18 +1044,6 @@ int mxspots_score_spots(
             sum_snr += spots[i].snr;
         }
         out_score->avg_snr = (float)(sum_snr / spot_count);
-    }
-
-    int n_bragg = out_score->bragg_spots;
-    if (n_bragg <= 0 && out_score->bragg_percent > 0.0f) {
-        n_bragg = (int)roundf((out_score->bragg_percent / 100.0f) * (float)spot_count);
-    }
-
-    /* Strict gate: if no Bragg spots, resolution is unresolved (999.0) and score is 0.0 */
-    if (n_bragg <= 0) {
-        out_score->d_min = 999.0f;
-        out_score->score = 0.0f;
-        return 0;
     }
 
     /* If d_min was not already provided from regularity analysis (e.g. out_score->d_min <= 0.0f or >= 900.0f), compute from spots */
@@ -1085,10 +1086,10 @@ int mxspots_score_spots(
         if (s_res < 0.0f) s_res = 0.0f;
     }
 
-    float z = -6.50f + 0.75f * logf(1.0f + (float)n_bragg)
-                     + 1.20f * logf(1.0f + snr)
-                     + 1.40f * (p_bragg / 100.0f)
-                     + 0.50f * s_res;
+    float z = -5.00f + 0.58f * logf(1.0f + (float)n_bragg)
+                     + 0.35f * logf(1.0f + snr)
+                     + 0.70f * (p_bragg / 100.0f)
+                     + 0.40f * s_res;
 
     float raw_score = 100.0f / (1.0f + expf(-z));
     if (raw_score > 100.0f) raw_score = 100.0f;

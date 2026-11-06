@@ -61,7 +61,7 @@ The presence of multiple independent crystal lattices detected on a single diffr
 _Avoid_: Overlapping frames, double lattice, multiple crystals
 
 **Composite Quality Score**:
-A normalized 0–100 quality metric computed by the Spot Engine using a Hybrid Gated-Logistic model (ADR 0020). Bragg spot count and average Bragg SNR serve as the major co-equal factors (~82% dynamic share), followed by Bragg percentage as the secondary factor (~12%), and 98th percentile resolution limit ($d_{98}$) as the tertiary factor (~6%), with post-logistic ice contamination penalties capped at 10 points. A strict zero-gate applies if no Bragg spots are found ($N_{\text{bragg}} = 0$).
+A normalized 0–100 quality metric computed by the Spot Engine using a calibrated Gated-Logistic model (ADR 0023). Bragg spot count serves as the primary factor (50% dynamic share over $N_B \in [20, 1500]$), Bragg SNR as the secondary major factor (30% dynamic share over $\text{SNR} \in [10, 800]$), followed by Bragg purity (~13%) and 98th percentile resolution limit (~7%), with post-logistic ice contamination penalties capped at 10 points. A strict zero-gate applies if no Bragg spots are found ($N_{\text{bragg}} = 0$), setting score and average SNR to 0.0.
 _Avoid_: Frame score, quality index, total score
 
 **XDS Spot File**:

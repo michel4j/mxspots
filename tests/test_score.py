@@ -112,7 +112,7 @@ def test_score_spots_explicit_avg_snr():
     )
 
     assert result.avg_snr == pytest.approx(40.0)
-    assert result.score > 50.0
+    assert result.score > 20.0
 
 
 def test_score_ice_frame_metrics(test_data_dir):

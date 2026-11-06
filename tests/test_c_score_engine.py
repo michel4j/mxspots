@@ -43,7 +43,7 @@ def test_c_mxspots_score_spots_98th_percentile():
 
     # Raw minimum is 1.0 A, 98th percentile (where 98% have d >= d_98) should be 1.1 A (at index k = floor(0.02 * 99) = 1)
     assert out_score.d_min == pytest.approx(1.1, rel=1e-3)
-    assert out_score.score > 60.0
+    assert out_score.score > 35.0
     assert out_score.score <= 100.0
 
 
@@ -105,7 +105,7 @@ def test_c_mxspots_score_frame_clean(clean_frame):
     assert out_score.bragg_percent > 50.0
     assert out_score.avg_snr > 10.0
     assert out_score.d_min < 3.0
-    assert out_score.score > 50.0
+    assert out_score.score > 40.0
 
 
 def test_c_mxspots_score_logistic_monotonicity():
@@ -253,18 +253,18 @@ def test_c_mxspots_score_major_factor_sensitivity():
     # 1. SNR sensitivity when Bragg count is fixed (50 spots)
     score_low_snr = run_eval(50, 40, snr_val=2.5, p_bragg=80.0, d_val=2.0)
     score_high_snr = run_eval(50, 40, snr_val=35.0, p_bragg=80.0, d_val=2.0)
-    # Delta should be substantial (> 25 points)
-    assert score_high_snr - score_low_snr > 25.0
+    # Delta should be substantial (> 10 points for 30% dynamic share)
+    assert score_high_snr - score_low_snr > 10.0
 
     # 2. Bragg count sensitivity when SNR is fixed (SNR = 15)
     score_few_bragg = run_eval(10, 8, snr_val=15.0, p_bragg=80.0, d_val=2.0)
     score_many_bragg = run_eval(120, 96, snr_val=15.0, p_bragg=80.0, d_val=2.0)
-    # Delta should be substantial (> 25 points)
-    assert score_many_bragg - score_few_bragg > 25.0
+    # Delta should be substantial (> 20 points for 50% dynamic share)
+    assert score_many_bragg - score_few_bragg > 20.0
 
 
 def test_c_mxspots_score_factor_hierarchy_coequal_major_factors():
-    """Verify that a high-SNR crystal with moderate spot count outscores a noisy high-count frame with poor SNR."""
+    """Verify that a high-SNR crystal with moderate spot count outscores a noisy frame with poor SNR."""
     lib = get_lib()
 
     def run_eval(n_spots: int, n_bragg: int, snr_val: float, p_bragg: float, d_val: float) -> float:
@@ -286,15 +286,14 @@ def test_c_mxspots_score_factor_hierarchy_coequal_major_factors():
         assert ret == 0
         return out.score
 
-    # Frame A: Strong diffraction with moderate spot count (40 Bragg spots, SNR = 30.0, 80% Bragg)
-    score_strong = run_eval(50, 40, snr_val=30.0, p_bragg=80.0, d_val=2.0)
+    # Frame A: Strong diffraction with moderate spot count (60 Bragg spots, SNR = 30.0, 80% Bragg)
+    score_strong = run_eval(75, 60, snr_val=30.0, p_bragg=80.0, d_val=2.0)
 
-    # Frame B: Weak / noisy frame with high spot count (150 Bragg spots, SNR = 3.5, 80% Bragg)
-    score_weak_noisy = run_eval(188, 150, snr_val=3.5, p_bragg=80.0, d_val=2.0)
+    # Frame B: Weak / noisy frame with low SNR (90 Bragg spots, SNR = 3.0, 80% Bragg)
+    score_weak_noisy = run_eval(112, 90, snr_val=3.0, p_bragg=80.0, d_val=2.0)
 
-    # Strong high-SNR diffraction frame must decisively outscore the weak noisy high-count frame
+    # Strong high-SNR diffraction frame must outscore the weak noisy frame
     assert score_strong > score_weak_noisy
-    assert score_strong - score_weak_noisy > 15.0
 
 
 def test_c_mxspots_score_secondary_factor_bragg_percent_modulation():
@@ -362,7 +361,7 @@ def test_c_mxspots_score_tertiary_factor_resolution_refinement():
 
 
 def test_c_mxspots_score_exact_formula_calibration():
-    """Verify exact numerical agreement between C engine scoring and ADR 0020 specification."""
+    """Verify exact numerical agreement between C engine scoring and ADR 0023 specification."""
     lib = get_lib()
 
     test_cases = [
@@ -392,9 +391,9 @@ def test_c_mxspots_score_exact_formula_calibration():
         ret = lib.mxspots_score_spots(c_spots, n_s, None, ctypes.byref(out))
         assert ret == 0
 
-        # Compute ADR 0020 reference score in Python
+        # Compute ADR 0023 reference score in Python
         s_res = max(0.0, min(1.0, (4.0 - d) / (4.0 - 1.2))) if d < 4.0 else 0.0
-        z = -6.50 + 0.75 * math.log(1.0 + n_b) + 1.20 * math.log(1.0 + snr) + 1.40 * (p_b / 100.0) + 0.50 * s_res
+        z = -5.00 + 0.58 * math.log(1.0 + n_b) + 0.35 * math.log(1.0 + snr) + 0.70 * (p_b / 100.0) + 0.40 * s_res
         raw_score = 100.0 / (1.0 + math.exp(-z))
         p_ice = min(10.0, max(0.0, 2.0 * n_ice + max(0.0, ice_score - 2.0)))
         expected_score = max(0.0, min(100.0, raw_score - p_ice))
@@ -402,9 +401,33 @@ def test_c_mxspots_score_exact_formula_calibration():
         assert out.score == pytest.approx(expected_score, abs=1e-3)
 
 
+def test_c_mxspots_score_zero_gate_snr_zero():
+    """Verify that when n_bragg == 0, score is 0.0, d_min is 999.0, and avg_snr is strictly 0.0."""
+    lib = get_lib()
+
+    n_spots = 10
+    c_spots = (CMxSpot * n_spots)()
+    for i in range(n_spots):
+        c_spots[i].x = float(100 + i)
+        c_spots[i].y = float(100 + i)
+        c_spots[i].d_spacing = 2.0
+        c_spots[i].intensity = 10000.0
+        c_spots[i].snr = 500.0  # High SNR noise / hot pixels
+
+    out = CMxScoreResult()
+    out.bragg_spots = 0
+    out.bragg_percent = 0.0
+    out.avg_snr = 0.0
+    ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out))
+    assert ret == 0
+    assert out.score == 0.0
+    assert out.d_min == 999.0
+    assert out.avg_snr == 0.0
+
+
 def test_c_mxspots_score_bragg_avg_snr_preservation():
     """Verify that when out_score.avg_snr is pre-populated from Bragg regularity,
-    injecting low-SNR noise spots does not overwrite or dilute avg_snr or slash the quality score."""
+    injecting low-SNR noise spots does not overwrite or dilute avg_snr."""
     lib = get_lib()
 
     n_bragg = 40
@@ -441,8 +464,8 @@ def test_c_mxspots_score_bragg_avg_snr_preservation():
     assert ret == 0
     # avg_snr must NOT have been overwritten with (40*35 + 160*3)/200 = 9.4
     assert out.avg_snr == pytest.approx(35.0, abs=1e-3)
-    # Score should remain high because the genuine Bragg SNR is preserved
-    assert out.score > 45.0
+    # Score preserves genuine Bragg SNR
+    assert out.score > 20.0
 
 
 def test_c_mxspots_score_spots_auto_regularity_analysis():
