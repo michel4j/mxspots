@@ -1,4 +1,4 @@
-from .models import IceRing, SpotParams, Spot, SpotList, ScoreResult
+from .models import IceRing, SpotParams, Spot, SpotList, ScoreResult, DiffractionFrame
 from .spotfinder import (
     findspots,
     findspots_data,
@@ -24,6 +24,7 @@ __all__ = [
     "Spot",
     "SpotList",
     "ScoreResult",
+    "DiffractionFrame",
     "SpotFinderContext",
     "findspots",
     "findspots_data",

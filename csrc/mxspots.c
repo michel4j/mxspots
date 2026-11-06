@@ -556,15 +556,75 @@ int mxspots_find_spots_ctx(
     int ny,
     const MxSpotsParams *params,
     MxSpot *out_spots,
-    int max_spots
+    int max_spots,
+    MxIceResult *out_ice
 ) {
     if (ctx == NULL || data == NULL || nx <= 0 || ny <= 0 || params == NULL) {
+        if (out_ice != NULL) {
+            memset(out_ice, 0, sizeof(MxIceResult));
+        }
         return 0;
     }
 
     if (nx > ctx->max_nx || ny > ctx->max_ny) {
+        if (out_ice != NULL) {
+            memset(out_ice, 0, sizeof(MxIceResult));
+        }
         return 0;
     }
+
+    MxSpotsParams effective_params = *params;
+    MxIceResult ice_res;
+    ice_res.num_rings = 0;
+    ice_res.ice_score = 0.0f;
+    if (params->auto_ice_mask) {
+        MxSpotsParams ice_detect_params = *params;
+        if (params->ice_sensitivity > 0.0f) {
+            ice_detect_params.snr_threshold = params->ice_sensitivity;
+        } else {
+            ice_detect_params.snr_threshold = 2.5f;
+        }
+        mxspots_detect_ice(data, nx, ny, &ice_detect_params, &ice_res);
+        if (out_ice != NULL) {
+            *out_ice = ice_res;
+        }
+        if (ice_res.num_rings > 0) {
+            float dist = (params->distance > 0.0f) ? params->distance : 200.0f;
+            float wvl = (params->wavelength > 0.0f) ? params->wavelength : 1.0f;
+
+            for (int r = 0; r < ice_res.num_rings && effective_params.num_masked_rings < MXSPOTS_MAX_MASKED_RINGS; ++r) {
+                float d_min_r = ice_res.rings[r].d_min;
+                float d_max_r = ice_res.rings[r].d_max;
+
+                float r_min = 0.0f;
+                if (d_max_r > 0.0f) {
+                    float arg = wvl / (2.0f * d_max_r);
+                    if (arg < 1.0f) {
+                        float theta = asinf(arg);
+                        r_min = dist * tanf(2.0f * theta);
+                    }
+                }
+                float r_max = 1e6f;
+                if (d_min_r > 0.0f) {
+                    float arg = wvl / (2.0f * d_min_r);
+                    if (arg < 1.0f) {
+                        float theta = asinf(arg);
+                        r_max = dist * tanf(2.0f * theta);
+                    }
+                }
+
+                float r2_a = r_min * r_min;
+                float r2_b = r_max * r_max;
+                int idx = effective_params.num_masked_rings;
+                effective_params.masked_rings_r2[idx][0] = (r2_a < r2_b) ? r2_a : r2_b;
+                effective_params.masked_rings_r2[idx][1] = (r2_a > r2_b) ? r2_a : r2_b;
+                effective_params.num_masked_rings++;
+            }
+        }
+    } else if (out_ice != NULL) {
+        memset(out_ice, 0, sizeof(MxIceResult));
+    }
+    params = &effective_params;
 
     int stride = nx + 1;
     IntegralImage sat;
@@ -840,6 +900,19 @@ int mxspots_find_spots_ctx(
                     continue;
                 }
 
+                int in_ice_shell = 0;
+                for (int r = 0; r < ice_res.num_rings; ++r) {
+                    float low_d = (ice_res.rings[r].d_min < ice_res.rings[r].d_max) ? ice_res.rings[r].d_min : ice_res.rings[r].d_max;
+                    float high_d = (ice_res.rings[r].d_min > ice_res.rings[r].d_max) ? ice_res.rings[r].d_min : ice_res.rings[r].d_max;
+                    if (d >= low_d && d <= high_d) {
+                        in_ice_shell = 1;
+                        break;
+                    }
+                }
+                if (in_ice_shell) {
+                    continue;
+                }
+
                 if (spot_count < spot_capacity) {
                     spots[spot_count].x = cx;
                     spots[spot_count].y = cy;
@@ -872,18 +945,25 @@ int mxspots_find_spots(
     int ny,
     const MxSpotsParams *params,
     MxSpot *out_spots,
-    int max_spots
+    int max_spots,
+    MxIceResult *out_ice
 ) {
     if (data == NULL || nx <= 0 || ny <= 0 || params == NULL) {
+        if (out_ice != NULL) {
+            memset(out_ice, 0, sizeof(MxIceResult));
+        }
         return 0;
     }
 
     MxSpotsContext *ctx = mxspots_create_context(nx, ny);
     if (ctx == NULL) {
+        if (out_ice != NULL) {
+            memset(out_ice, 0, sizeof(MxIceResult));
+        }
         return 0;
     }
 
-    int spot_count = mxspots_find_spots_ctx(ctx, data, nx, ny, params, out_spots, max_spots);
+    int spot_count = mxspots_find_spots_ctx(ctx, data, nx, ny, params, out_spots, max_spots, out_ice);
     mxspots_free_context(ctx);
     return spot_count;
 }
@@ -891,6 +971,7 @@ int mxspots_find_spots(
 int mxspots_score_spots(
     const MxSpot *spots,
     int spot_count,
+    const MxSpotsParams *params,
     MxScoreResult *out_score
 ) {
     if (out_score == NULL) {
@@ -898,17 +979,49 @@ int mxspots_score_spots(
     }
 
     if (spots == NULL || spot_count <= 0) {
-        out_score->spot_count = 0;
-        out_score->bragg_spots = 0;
-        out_score->bragg_percent = 0.0f;
-        out_score->avg_intensity = 0.0f;
-        out_score->avg_snr = 0.0f;
+        float ice_sc = out_score->ice_score;
+        int num_ice = out_score->num_ice_rings;
+        MxIceRing rings[MXSPOTS_MAX_MASKED_RINGS];
+        memcpy(rings, out_score->rings, sizeof(rings));
+        memset(out_score, 0, sizeof(MxScoreResult));
         out_score->d_min = 999.0f;
-        out_score->ice_score = 0.0f;
-        out_score->num_ice_rings = 0;
-        out_score->num_lattices = 0;
-        out_score->score = 0.0f;
+        out_score->ice_score = ice_sc;
+        out_score->num_ice_rings = num_ice;
+        memcpy(out_score->rings, rings, sizeof(rings));
         return 0;
+    }
+
+    /* If regularity not pre-computed and params provided, analyze regularity in C */
+    if (out_score->bragg_spots <= 0 && params != NULL && spot_count >= 5) {
+        float pct_bragg = 0.0f;
+        int bragg_cnt = 0;
+        float avg_int = 0.0f;
+        float avg_snr = 0.0f;
+        int n_lat = 0;
+        float d_min = 999.0f;
+        int reg_ret = mxspots_analyze_regularity(
+            spots,
+            spot_count,
+            params,
+            &pct_bragg,
+            &bragg_cnt,
+            &avg_int,
+            &avg_snr,
+            &n_lat,
+            &d_min
+        );
+        if (reg_ret == 0) {
+            out_score->bragg_percent = pct_bragg;
+            out_score->bragg_spots = bragg_cnt;
+            out_score->avg_intensity = avg_int;
+            if (out_score->avg_snr <= 0.0f) {
+                out_score->avg_snr = avg_snr;
+            }
+            out_score->num_lattices = n_lat;
+            if (out_score->d_min <= 0.0f || out_score->d_min >= 900.0f) {
+                out_score->d_min = d_min;
+            }
+        }
     }
 
     out_score->spot_count = spot_count;
@@ -1015,9 +1128,13 @@ int mxspots_score_frame(
     mxspots_detect_ice(data, nx, ny, params, &ice_res);
     out_score->ice_score = ice_res.ice_score;
     out_score->num_ice_rings = ice_res.num_rings;
+    for (int i = 0; i < ice_res.num_rings && i < MXSPOTS_MAX_MASKED_RINGS; ++i) {
+        out_score->rings[i] = ice_res.rings[i];
+    }
 
     /* Merge detected ice rings into effective params */
     MxSpotsParams effective_params = *params;
+    effective_params.auto_ice_mask = 0;
     if (ice_res.num_rings > 0) {
         float distance = (params->distance > 0.0f) ? params->distance : 200.0f;
         float wavelength = (params->wavelength > 0.0f) ? params->wavelength : 1.0f;
@@ -1059,7 +1176,7 @@ int mxspots_score_frame(
         return -2;
     }
 
-    int spot_count = mxspots_find_spots(data, nx, ny, &effective_params, spots, max_spots);
+    int spot_count = mxspots_find_spots(data, nx, ny, &effective_params, spots, max_spots, NULL);
     int actual_count = (spot_count < max_spots) ? spot_count : max_spots;
 
     /* 3. Regularity analysis */
@@ -1083,7 +1200,7 @@ int mxspots_score_frame(
         );
     }
 
-    int ret = mxspots_score_spots(spots, actual_count, out_score);
+    int ret = mxspots_score_spots(spots, actual_count, &effective_params, out_score);
     free(spots);
     return ret;
 }

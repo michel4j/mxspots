@@ -23,6 +23,8 @@ class CMxSpotsParams(ctypes.Structure):
         ("d_max", ctypes.c_float),
         ("num_masked_rings", ctypes.c_int),
         ("masked_rings_r2", (ctypes.c_float * 2) * 16),
+        ("auto_ice_mask", ctypes.c_int),
+        ("ice_sensitivity", ctypes.c_float),
     ]
 
     @classmethod
@@ -91,6 +93,8 @@ class CMxSpotsParams(ctypes.Structure):
             d_max=ctypes.c_float(params.d_max),
             num_masked_rings=ctypes.c_int(num_rings),
             masked_rings_r2=masked_r2_arr,
+            auto_ice_mask=ctypes.c_int(1 if params.ice_mask else 0),
+            ice_sensitivity=ctypes.c_float(params.ice_sensitivity),
         )
 
 
@@ -101,6 +105,15 @@ class CMxSpot(ctypes.Structure):
         ("d_spacing", ctypes.c_float),
         ("intensity", ctypes.c_float),
         ("snr", ctypes.c_float),
+    ]
+
+
+class CMxIceRing(ctypes.Structure):
+    _fields_ = [
+        ("d_spacing", ctypes.c_float),
+        ("d_min", ctypes.c_float),
+        ("d_max", ctypes.c_float),
+        ("score", ctypes.c_float),
     ]
 
 
@@ -116,15 +129,7 @@ class CMxScoreResult(ctypes.Structure):
         ("num_ice_rings", ctypes.c_int),
         ("num_lattices", ctypes.c_int),
         ("score", ctypes.c_float),
-    ]
-
-
-class CMxIceRing(ctypes.Structure):
-    _fields_ = [
-        ("d_spacing", ctypes.c_float),
-        ("d_min", ctypes.c_float),
-        ("d_max", ctypes.c_float),
-        ("score", ctypes.c_float),
+        ("rings", CMxIceRing * 16),
     ]
 
 
@@ -209,6 +214,7 @@ def get_lib() -> ctypes.CDLL:
         ctypes.POINTER(CMxSpotsParams),        # params
         ctypes.POINTER(CMxSpot),               # out_spots
         ctypes.c_int,                          # max_spots
+        ctypes.POINTER(CMxIceResult),          # out_ice
     ]
     lib.mxspots_find_spots_ctx.restype = ctypes.c_int
 
@@ -220,6 +226,7 @@ def get_lib() -> ctypes.CDLL:
         ctypes.POINTER(CMxSpotsParams),        # params
         ctypes.POINTER(CMxSpot),               # out_spots
         ctypes.c_int,                          # max_spots
+        ctypes.POINTER(CMxIceResult),          # out_ice
     ]
     lib.mxspots_find_spots.restype = ctypes.c_int
 
@@ -227,6 +234,7 @@ def get_lib() -> ctypes.CDLL:
     lib.mxspots_score_spots.argtypes = [
         ctypes.POINTER(CMxSpot),               # spots
         ctypes.c_int,                          # spot_count
+        ctypes.POINTER(CMxSpotsParams),        # params
         ctypes.POINTER(CMxScoreResult),        # out_score
     ]
     lib.mxspots_score_spots.restype = ctypes.c_int

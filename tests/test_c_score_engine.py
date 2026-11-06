@@ -38,7 +38,7 @@ def test_c_mxspots_score_spots_98th_percentile():
     out_score.ice_score = 0.0
     out_score.num_ice_rings = 0
 
-    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_score))
+    ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out_score))
     assert ret == 0
 
     # Raw minimum is 1.0 A, 98th percentile (where 98% have d >= d_98) should be 1.1 A (at index k = floor(0.02 * 99) = 1)
@@ -64,7 +64,7 @@ def test_c_mxspots_score_spots_gating_zero_bragg():
     out_score.bragg_percent = 0.0
     out_score.avg_intensity = 0.0
 
-    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_score))
+    ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out_score))
     assert ret == 0
     assert out_score.score == pytest.approx(0.0)
 
@@ -72,7 +72,7 @@ def test_c_mxspots_score_spots_gating_zero_bragg():
 def test_c_mxspots_score_spots_empty():
     lib = get_lib()
     out_score = CMxScoreResult()
-    ret = lib.mxspots_score_spots(None, 0, ctypes.byref(out_score))
+    ret = lib.mxspots_score_spots(None, 0, None, ctypes.byref(out_score))
     assert ret == 0
     assert out_score.spot_count == 0
     assert out_score.bragg_spots == 0
@@ -128,7 +128,7 @@ def test_c_mxspots_score_logistic_monotonicity():
         out_score.num_ice_rings = num_ice
         out_score.ice_score = float(num_ice) * 2.5
 
-        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_score))
+        ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out_score))
         assert ret == 0
         return out_score.score
 
@@ -164,14 +164,14 @@ def test_c_mxspots_score_intensity_weight_removed():
     out1.bragg_spots = 40
     out1.bragg_percent = 80.0
     out1.avg_intensity = 100.0
-    ret1 = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out1))
+    ret1 = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out1))
     assert ret1 == 0
 
     out2 = CMxScoreResult()
     out2.bragg_spots = 40
     out2.bragg_percent = 80.0
     out2.avg_intensity = 50000.0
-    ret2 = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out2))
+    ret2 = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out2))
     assert ret2 == 0
 
     assert out1.score == pytest.approx(out2.score, rel=1e-5)
@@ -196,7 +196,7 @@ def test_c_mxspots_score_ice_penalty_capped_at_10_points():
     out_no_ice.avg_intensity = 2000.0
     out_no_ice.num_ice_rings = 0
     out_no_ice.ice_score = 0.0
-    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_no_ice))
+    ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out_no_ice))
     assert ret == 0
     base_score = out_no_ice.score
 
@@ -207,7 +207,7 @@ def test_c_mxspots_score_ice_penalty_capped_at_10_points():
     out_max_ice.avg_intensity = 2000.0
     out_max_ice.num_ice_rings = 6
     out_max_ice.ice_score = 50.0
-    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_max_ice))
+    ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out_max_ice))
     assert ret == 0
     max_ice_score = out_max_ice.score
 
@@ -221,7 +221,7 @@ def test_c_mxspots_score_ice_penalty_capped_at_10_points():
     out_mod_ice.avg_intensity = 2000.0
     out_mod_ice.num_ice_rings = 1
     out_mod_ice.ice_score = 3.0
-    ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out_mod_ice))
+    ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out_mod_ice))
     assert ret == 0
 
     assert base_score - out_mod_ice.score == pytest.approx(3.0, abs=1e-4)
@@ -246,7 +246,7 @@ def test_c_mxspots_score_major_factor_sensitivity():
         out.d_min = d_val
         out.num_ice_rings = 0
         out.ice_score = 0.0
-        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out))
+        ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out))
         assert ret == 0
         return out.score
 
@@ -282,7 +282,7 @@ def test_c_mxspots_score_factor_hierarchy_coequal_major_factors():
         out.d_min = d_val
         out.num_ice_rings = 0
         out.ice_score = 0.0
-        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out))
+        ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out))
         assert ret == 0
         return out.score
 
@@ -316,7 +316,7 @@ def test_c_mxspots_score_secondary_factor_bragg_percent_modulation():
         out.d_min = d_val
         out.num_ice_rings = 0
         out.ice_score = 0.0
-        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out))
+        ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out))
         assert ret == 0
         return out.score
 
@@ -348,7 +348,7 @@ def test_c_mxspots_score_tertiary_factor_resolution_refinement():
         out.d_min = d_val
         out.num_ice_rings = 0
         out.ice_score = 0.0
-        ret = lib.mxspots_score_spots(c_spots, n_spots, ctypes.byref(out))
+        ret = lib.mxspots_score_spots(c_spots, n_spots, None, ctypes.byref(out))
         assert ret == 0
         return out.score
 
@@ -389,7 +389,7 @@ def test_c_mxspots_score_exact_formula_calibration():
         out.d_min = d
         out.num_ice_rings = n_ice
         out.ice_score = ice_score
-        ret = lib.mxspots_score_spots(c_spots, n_s, ctypes.byref(out))
+        ret = lib.mxspots_score_spots(c_spots, n_s, None, ctypes.byref(out))
         assert ret == 0
 
         # Compute ADR 0020 reference score in Python
@@ -437,9 +437,35 @@ def test_c_mxspots_score_bragg_avg_snr_preservation():
     out.num_ice_rings = 0
     out.ice_score = 0.0
 
-    ret = lib.mxspots_score_spots(c_spots, total_spots, ctypes.byref(out))
+    ret = lib.mxspots_score_spots(c_spots, total_spots, None, ctypes.byref(out))
     assert ret == 0
     # avg_snr must NOT have been overwritten with (40*35 + 160*3)/200 = 9.4
     assert out.avg_snr == pytest.approx(35.0, abs=1e-3)
     # Score should remain high because the genuine Bragg SNR is preserved
     assert out.score > 45.0
+
+
+def test_c_mxspots_score_spots_auto_regularity_analysis():
+    """Verify that when params is provided and bragg_spots <= 0,
+    mxspots_score_spots internally executes regularity analysis and scores in one call."""
+    from mxspots.models import SpotParams
+    from mxspots._lib import CMxSpotsParams
+    from mxspots.synthetic import get_cached_synthetic_frame
+
+    frame = get_cached_synthetic_frame("tests/data/clean.yaml")
+    lib = get_lib()
+
+    c_params = CMxSpotsParams.from_params(SpotParams())
+    max_spots = 5000
+    c_spots = (CMxSpot * max_spots)()
+    data_ptr = frame.data.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    ny, nx = frame.data.shape
+    spot_count = lib.mxspots_find_spots(data_ptr, nx, ny, ctypes.byref(c_params), c_spots, max_spots, None)
+    assert spot_count > 10
+
+    out = CMxScoreResult()
+    ret = lib.mxspots_score_spots(c_spots, spot_count, ctypes.byref(c_params), ctypes.byref(out))
+    assert ret == 0
+    assert out.bragg_spots > 0
+    assert out.bragg_percent > 0.0
+    assert out.score > 0.0

@@ -40,6 +40,8 @@ typedef struct {
     float d_max;               /* Low-resolution limit in Angstroms */
     int num_masked_rings;      /* Number of active masked radial/resolution rings */
     float masked_rings_r2[MXSPOTS_MAX_MASKED_RINGS][2]; /* [min_r2, max_r2] in mm^2 */
+    int auto_ice_mask;         /* Automatically detect and mask ice powder rings */
+    float ice_sensitivity;     /* Ice ring detection sensitivity threshold */
 } MxSpotsParams;
 
 /**
@@ -52,6 +54,16 @@ typedef struct {
     float intensity;           /* Integrated spot intensity */
     float snr;                 /* Peak SNR */
 } MxSpot;
+
+/**
+ * Detected ice ring representation.
+ */
+typedef struct {
+    float d_spacing;           /* Nominal d-spacing in Angstroms */
+    float d_min;               /* High-resolution limit of ring in Angstroms */
+    float d_max;               /* Low-resolution limit of ring in Angstroms */
+    float score;               /* Peak significance SNR */
+} MxIceRing;
 
 /**
  * Diffraction frame quality score metrics.
@@ -67,17 +79,8 @@ typedef struct {
     int num_ice_rings;         /* Number of detected ice rings */
     int num_lattices;          /* Number of distinct crystal lattices identified */
     float score;               /* Unified composite quality score (0.0 - 100.0) */
+    MxIceRing rings[MXSPOTS_MAX_MASKED_RINGS]; /* Detected ice rings */
 } MxScoreResult;
-
-/**
- * Detected ice ring representation.
- */
-typedef struct {
-    float d_spacing;           /* Nominal d-spacing in Angstroms */
-    float d_min;               /* High-resolution limit of ring in Angstroms */
-    float d_max;               /* Low-resolution limit of ring in Angstroms */
-    float score;               /* Peak significance SNR */
-} MxIceRing;
 
 /**
  * Ice detection result summary.
@@ -123,7 +126,8 @@ MXSPOTS_API int mxspots_find_spots_ctx(
     int ny,
     const MxSpotsParams *params,
     MxSpot *out_spots,
-    int max_spots
+    int max_spots,
+    MxIceResult *out_ice
 );
 
 /**
@@ -135,7 +139,8 @@ MXSPOTS_API int mxspots_find_spots(
     int ny,
     const MxSpotsParams *params,
     MxSpot *out_spots,
-    int max_spots
+    int max_spots,
+    MxIceResult *out_ice
 );
 
 /**
@@ -144,6 +149,7 @@ MXSPOTS_API int mxspots_find_spots(
 MXSPOTS_API int mxspots_score_spots(
     const MxSpot *spots,
     int spot_count,
+    const MxSpotsParams *params,
     MxScoreResult *out_score
 );
 

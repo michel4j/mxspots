@@ -22,7 +22,7 @@ def test_c_regularity_clean_frame(clean_frame):
 
     max_spots = 5000
     c_spots = (CMxSpot * max_spots)()
-    spot_count = lib.mxspots_find_spots(data_ptr, nx, ny, ctypes.byref(c_params), c_spots, max_spots)
+    spot_count = lib.mxspots_find_spots(data_ptr, nx, ny, ctypes.byref(c_params), c_spots, max_spots, None)
     assert spot_count > 20
 
     bragg_pct = ctypes.c_float(0.0)
