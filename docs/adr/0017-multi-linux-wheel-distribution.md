@@ -17,7 +17,7 @@ Distributing pre-compiled binary wheels across diverse Linux installations intro
 
 2. **Standard Linux ABI Targets**:
    - **`manylinux_2_28`**: Targets standard glibc-based distributions (Rocky/Alma/RHEL 8+, Ubuntu 20.04+, Debian 11+, Fedora 28+).
-   - **`musllinux_1_2`**: Targets Alpine Linux 3.19+ and other musl-based distributions.
+   - **`musllinux`**: Skipped (`*-musllinux_*`) because upstream dependency `mxio` depends on `pycbf` (`cbflib`), which does not provide musl wheels and fails to build on musl libc due to opaque `FILE` types.
    - **Architectures**: `x86_64` (Intel/AMD 64-bit) and `aarch64` (ARM 64-bit).
    - **Python Versions**: CPython 3.12 and 3.13 (`cp312-*`, `cp313-*`).
 
@@ -27,5 +27,5 @@ Distributing pre-compiled binary wheels across diverse Linux installations intro
 
 ## Consequences
 
-- End users on modern Linux distributions (both glibc and musl) can install `mxspots` via `pip install mxspots` without compiling from source.
+- End users on modern glibc-based Linux distributions can install `mxspots` via `pip install mxspots` without compiling from source.
 - Binaries execute reliably without CPU microarchitecture mismatch crashes.

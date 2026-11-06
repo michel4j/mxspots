@@ -30,7 +30,7 @@
 
 ### Binary Wheels (Recommended)
 
-Pre-compiled binary wheels are available for standard Linux systems (`manylinux_2_28` and `musllinux_1_2` across `x86_64` and `aarch64` on Python 3.12+):
+Pre-compiled binary wheels are available for standard Linux systems (`manylinux_2_28` across `x86_64` and `aarch64` on Python 3.12+):
 
 ```bash
 pip install mxspots

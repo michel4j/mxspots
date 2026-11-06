@@ -39,7 +39,7 @@ pythonpath = ["src"]
 
 [tool.cibuildwheel]
 build = ["cp312-*", "cp313-*"]
-skip = ["*-musllinux_i686", "*-manylinux_i686", "pp*"]
+skip = ["*-musllinux_*", "*-manylinux_i686", "pp*"]
 build-verbosity = 1
 test-extras = ["dev"]
 test-command = "pytest {project}/tests"
@@ -53,6 +53,3 @@ test-command = "pytest {project}/tests"
 archs = ["x86_64", "aarch64"]
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
-musllinux-x86_64-image = "musllinux_1_2"
-musllinux-aarch64-image = "musllinux_1_2"
-before-all = "which apk >/dev/null 2>&1 && apk add --no-cache libgomp || true"
