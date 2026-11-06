@@ -475,7 +475,7 @@ def test_c_mxspots_score_spots_auto_regularity_analysis():
     from mxspots._lib import CMxSpotsParams
     from mxspots.synthetic import get_cached_synthetic_frame
 
-    frame = get_cached_synthetic_frame("tests/data/clean.yaml")
+    frame = get_cached_synthetic_frame("clean.yaml")
     lib = get_lib()
 
     c_params = CMxSpotsParams.from_params(SpotParams())

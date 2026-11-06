@@ -21,7 +21,7 @@ def test_diffraction_frame_from_yaml(test_data_dir):
 
 
 def test_diffraction_frame_from_synthetic():
-    synth = get_cached_synthetic_frame("tests/data/clean.yaml")
+    synth = get_cached_synthetic_frame("clean.yaml")
     frame = DiffractionFrame.from_source(synth)
 
     assert isinstance(frame, DiffractionFrame)
@@ -33,7 +33,7 @@ def test_diffraction_frame_from_synthetic():
 
 
 def test_diffraction_frame_from_existing_frame_override_params():
-    synth = get_cached_synthetic_frame("tests/data/clean.yaml")
+    synth = get_cached_synthetic_frame("clean.yaml")
     base_frame = DiffractionFrame.from_source(synth)
 
     custom_params = SpotParams(snr_threshold=12.0, d_max=15.0)

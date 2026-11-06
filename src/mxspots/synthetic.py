@@ -222,7 +222,7 @@ def generate_synthetic_frame(
 
 @functools.lru_cache(maxsize=16)
 def get_cached_synthetic_frame(
-    yaml_name_or_path: str,
+    yaml_name_or_path: Union[str, Path],
     max_spots: Optional[int] = None,
     sigma: float = 1.5,
     background: float = 10.0,
@@ -232,9 +232,19 @@ def get_cached_synthetic_frame(
     """Cached loader for synthetic frames to avoid re-generating large arrays across tests."""
     p = Path(yaml_name_or_path)
     if not p.is_file():
-        # Check relative to tests/data
-        tests_data_dir = Path(__file__).resolve().parent.parent.parent / "tests" / "data"
-        p = tests_data_dir / yaml_name_or_path
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        tests_data_dir = repo_root / "tests" / "data"
+        candidates = [
+            tests_data_dir / yaml_name_or_path,
+            tests_data_dir / p.name,
+            repo_root / yaml_name_or_path,
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                p = candidate
+                break
+        else:
+            p = tests_data_dir / yaml_name_or_path
 
     return generate_synthetic_frame(
         p,
